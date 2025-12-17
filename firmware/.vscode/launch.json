@@ -1,0 +1,36 @@
+{
+    "configurations": [
+        {
+            "name": "kee_smart_opener_silabs_debug - launch",
+            "cwd": "${workspaceFolder}",
+            "type": "cortex-debug",
+            "request": "launch",
+            "serverpath": "C:\\Users\\somhe\\.silabs\\slt\\installs\\archive\\exx32-v6.0.31\\JLinkGDBServerCL.exe",
+            "servertype": "jlink",
+            "gdbPath": "C:\\Users\\somhe\\.silabs\\slt\\installs\\archive\\exx32-v6.0.31\\arm-none-eabi-gdb.exe",
+            "device": "EFR32FG23BxxxF512",
+            "svdFile": "C:\\Users\\somhe\\AppData\\Local\\Temp\\silabs_extension\\silabs_extension\\svd\\EFR32FG23B010F512IM48.svd",
+            "runToEntryPoint": "main",
+            "rtos": "FreeRTOS",
+            "showDevDebugOutput": "raw",
+            "executable": "c:\\Users\\somhe\\repos\\kee_smart_opener\\firmware\\cmake_gcc\\build\\base\\kee_smart_opener.out",
+            "serialNumber": "440326427"
+        },
+        {
+            "name": "kee_smart_opener_silabs_debug - attach",
+            "cwd": "${workspaceFolder}",
+            "type": "cortex-debug",
+            "request": "attach",
+            "serverpath": "C:\\Users\\somhe\\.silabs\\slt\\installs\\archive\\exx32-v6.0.31\\JLinkGDBServerCL.exe",
+            "servertype": "jlink",
+            "gdbPath": "C:\\Users\\somhe\\.silabs\\slt\\installs\\archive\\exx32-v6.0.31\\arm-none-eabi-gdb.exe",
+            "device": "EFR32FG23BxxxF512",
+            "svdFile": "C:\\Users\\somhe\\AppData\\Local\\Temp\\silabs_extension\\silabs_extension\\svd\\EFR32FG23B010F512IM48.svd",
+            "runToEntryPoint": "main",
+            "rtos": "FreeRTOS",
+            "showDevDebugOutput": "raw",
+            "executable": "c:\\Users\\somhe\\repos\\kee_smart_opener\\firmware\\cmake_gcc\\build\\base\\kee_smart_opener.out",
+            "serialNumber": "440326427"
+        }
+    ]
+}

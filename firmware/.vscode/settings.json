@@ -6,5 +6,18 @@
         "*.c": "c"
     },
     "C_Cpp.intelliSenseEngine": "default",
-    "C_Cpp.errorSquiggles": "enabled"
+    "C_Cpp.errorSquiggles": "enabled",
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.renderWhitespace": "all",
+    "editor.renderControlCharacters": true,
+    "files.trimTrailingWhitespace": true,
+    "[c]": {
+        "editor.rulers": [
+            {
+                "column": 100,
+                "color": "#404040"
+            }
+        ]
+    }
 }
