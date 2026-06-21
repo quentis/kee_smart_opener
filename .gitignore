@@ -1,14 +1,14 @@
 # Silicon Labs
-firmware/.projectlinkstore
-firmware/.uceditor
-firmware/.vscode/c_cpp_properties.json
-firmware/autogen
-firmware/cmake_gcc/kee_smart_opener.cmake
-firmware/cmake_gcc/kee_smart_opener_project.cmake
-firmware/cmake_gcc/build
-firmware/config/rail/slc_args.json
-firmware/simplicity_sdk_2025.6.2
-firmware/trashed_modified_files
+sw/efr32fg23/.projectlinkstore
+sw/efr32fg23/.uceditor
+sw/efr32fg23/.vscode/c_cpp_properties.json
+sw/efr32fg23/autogen
+sw/efr32fg23/cmake_gcc/kee_smart_opener.cmake
+sw/efr32fg23/cmake_gcc/kee_smart_opener_project.cmake
+sw/efr32fg23/cmake_gcc/build
+sw/efr32fg23/config/rail/slc_args.json
+sw/efr32fg23/simplicity_sdk_2025.6.2
+sw/efr32fg23/trashed_modified_files
 
 # Prerequisites
 *.d
