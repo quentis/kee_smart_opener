@@ -1,0 +1,3 @@
+[submodule "hw/qg_kicad_lib"]
+	path = hw/qg_kicad_lib
+	url = https://github.com/Quentis/qg_kicad_lib.git
