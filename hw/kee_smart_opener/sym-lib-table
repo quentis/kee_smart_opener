@@ -1,0 +1,4 @@
+(sym_lib_table
+	(version 7)
+	(lib (name "qg_kicad_lib") (type "KiCad") (uri "../qg_kicad_lib/qg_kicad_lib.kicad_sym") (options "") (descr ""))
+)
