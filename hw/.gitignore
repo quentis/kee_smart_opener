@@ -1,0 +1,54 @@
+# ---- Per-user / local state ----
+*.kicad_prl
+fp-info-cache
+*.lck
+~*.lck
+
+# ---- Auto-saved and backup copies ----
+_autosave-*
+*-backups/
+*.kicad_pcb-bak
+*.kicad_sch-bak
+*.kicad_pro-bak
+*.bak
+*.bck
+.history
+
+# ---- Generated reports and netlists ----
+*.rpt
+*.net
+*.cmp
+# *.xml        # KiCad's intermediate BOM netlist — enable if it collides
+
+# ---- Router round-trips ----
+*.dsn
+*.ses
+
+# ---- Fabrication / assembly outputs ----
+# Prefer plotting into a dedicated folder and ignoring that folder:
+gerbers/
+production/
+*.gbr
+*.gbrjob
+*.drl
+*.gko
+*.gtl
+*.gbl
+*.gts
+*.gbs
+*.gto
+*.gbo
+
+# ---- 3D and document exports ----
+*.step
+*.stp
+*.wrl.bak
+
+# ---- OS cruft ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- KiCad plugin files ----
+**/jlcpcb
+**/bom

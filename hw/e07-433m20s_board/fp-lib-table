@@ -1,0 +1,4 @@
+(fp_lib_table
+	(version 7)
+	(lib (name "qg_kicad_lib") (type "KiCad") (uri "C:/Users/somhe/repos/kee_smart_opener/hw/qg_kicad_lib/qg_kicad_lib.pretty") (options "") (descr ""))
+)
