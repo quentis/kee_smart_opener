@@ -1,0 +1,18 @@
+/ {
+
+	leds {
+		compatible = "gpio-leds";
+
+		rgb_led_red: led_0 {
+			gpios = <&pico_header 11 GPIO_ACTIVE_LOW>;
+		};
+
+		rgb_led_green: led_1 {
+			gpios = <&pico_header 10 GPIO_ACTIVE_LOW>;
+		};
+
+		rgb_led_blue: led_2 {
+			gpios = <&pico_header 9 GPIO_ACTIVE_LOW>;
+		};
+	};
+};
