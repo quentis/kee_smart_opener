@@ -1,0 +1,24 @@
+{
+  "zephyr-workbench.westWorkspace.applications": [
+    {
+      "build.configurations": [
+        {
+          "name": "primary",
+          "board": "rpi_pico2/rp2350a/m33",
+          "active": "true",
+          "default-runner": "openocd",
+          "west-flags": [
+            "OPENOCD=${userHome}/.pico-sdk/openocd/0.12.0+dev/openocd.exe",
+            "OPENOCD_DEFAULT_PATH=${userHome}/.pico-sdk/openocd/0.12.0+dev/scripts"
+          ]
+        }
+      ],
+      "toolchain": "zephyr",
+      "sdk": "${userHome}/zephyr-sdks/zephyr-sdk-1.0.1",
+      "intellisense.provider": "clangd",
+      "path": "kso-fw"
+    }
+  ],
+  "zephyr-workbench.westWorkspace.selectedApplication": "kso-fw",
+  "C_Cpp.intelliSenseEngine": "disabled"
+}

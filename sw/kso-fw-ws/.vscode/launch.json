@@ -1,0 +1,56 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Zephyr Workbench Debug: kso-fw [primary]",
+			"type": "zephyr-workbench",
+			"request": "launch",
+			"cwd": "${workspaceFolder}/kso-fw",
+			"program": "${workspaceFolder}/kso-fw/build/primary/zephyr/zephyr.elf",
+			"svdPath": "${workspaceFolder}/deps/modules/hal/rpi_pico/src/rp2350/hardware_regs/RP2350.svd",
+			"miDebuggerPath": "C:/Users/somhe/zephyr-sdks/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb.exe",
+			"debugServerArgs": "debugserver --build-dir \"${workspaceFolder}/kso-fw/build/primary\" --runner openocd --gdb-port 3333 --config openocd.cfg --config ${workspaceFolder}/kso-fw/build/.debug/gdb.cfg --cmd-pre-init \"set _TARGETNAME rp2350.cm0\" --cmd-pre-init \"set USE_CORE { cm0 }\" --cmd-reset-halt \"reset init\"",
+			"gdbTarget": "localhost:3333",
+			"gdbMode": "program",
+		},
+		{
+			"name": "Pico 2: Cortex-Debug (OpenOCD + CMSIS-DAP)",
+			"type": "cortex-debug",
+			"request": "launch",
+			"cwd": "${workspaceFolder}/kso-fw",
+			"executable": "${workspaceFolder}/kso-fw/build/primary/zephyr/zephyr.elf",
+			"servertype": "openocd",
+			"serverpath": "${userHome}/.pico-sdk/openocd/0.12.0+dev/openocd.exe",
+			"searchDir": [
+				"${userHome}/.pico-sdk/openocd/0.12.0+dev/scripts"
+			],
+			"configFiles": [
+				"interface/cmsis-dap.cfg",
+				"target/rp2350.cfg"
+			],
+			// USE_CORE must be set BEFORE the target cfg is sourced, or you get
+			// two DAP cores and GDB attaches to the wrong one.
+			"openOCDPreConfigLaunchCommands": [
+				"set USE_CORE { cm0 }",
+			],
+			"openOCDLaunchCommands": [
+				"adapter speed 5000",
+				"rp2350.cm0 configure -rtos Zephyr",
+			],
+			"gdbPath": "${userHome}/zephyr-sdks/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb.exe",
+			"device": "RP2350",
+			"svdFile": "${workspaceFolder}/../modules/hal/rpi_pico/src/rp2350/hardware_regs/RP2350.svd",
+			"runToEntryPoint": "main",
+			"showDevDebugOutput": "none",
+			//       "preLaunchTask": "Zephyr: Build + Index",
+			"postLaunchCommands": [
+				"monitor reset halt",
+				"load"
+			],
+			"liveWatch": {
+				"enabled": true,
+				"samplesPerSecond": 4
+			}
+		},
+	]
+}

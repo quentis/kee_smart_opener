@@ -1,0 +1,87 @@
+{
+	"folders": [
+		{
+			"name": "kso-fw-ws",
+			"path": ".."
+		}
+	],
+	"settings": {
+		"terminal.integrated.stickyScroll.enabled": false,
+		// ---- clangd ----
+		"clangd.arguments": [
+			"--background-index",
+			"--background-index-priority=normal",
+			"--clang-tidy",
+			"--completion-style=detailed",
+			"--header-insertion=never",
+			"--header-insertion-decorators=false",
+			"--all-scopes-completion",
+			"--pch-storage=memory",
+			"--enable-config",
+			"-j=8",
+			"--query-driver=${userHome}/zephyr-sdks/zephyr-sdk-1.0.1,=${userHome}/zephyr-sdks/zephyr-sdk-1.0.1/*/bin/*,C:/Users/somhe/zephyr-sdks/zephyr-sdk-1.0.1/*/bin/*",
+			"--log=error"
+		],
+		"clangd.onConfigChanged": "restart",
+		"clangd.checkUpdates": false,
+
+		// --- Snippets ----
+		"editor.suggest.snippetsPreventQuickSuggestions": false,
+		"editor.inlayHints.enabled": "offUnlessPressed",
+
+		// ---- Stop CMake Tools from fighting west ----
+		"cmake.configureOnOpen": false,
+		"cmake.configureOnEdit": false,
+		"cmake.automaticReconfigure": false,
+
+		// ---- File associations ----
+		"files.associations": {
+			"*.overlay": "dts",
+			"*.dtsi": "dts",
+			"*.dts": "dts",
+			"*.conf": "properties",
+			"prj.conf": "properties",
+			"Kconfig*": "kconfig",
+			"*.h": "c",
+			"west.yml": "yaml"
+		},
+		// ---- Performance: the west workspace is ~100k files ----
+		"files.watcherExclude": {
+			"**/build/**": true,
+			"**/.west/**": true,
+			"**/zephyr/**": true,
+			"**/modules/**": true,
+			"**/bootloader/**": true,
+			"**/.venv/**": true,
+			"**/.cache/clangd/**": true
+		},
+		"search.exclude": {
+			"**/build/**": true,
+			"**/.cache/**": true,
+			"**/.venv/**": true
+		},
+		"files.exclude": {
+			"**/__pycache__": true,
+			"**/.cache": true
+		},
+		// ---- Editor ----
+		"editor.formatOnSave": false, // Zephyr style is picky; format selections manually
+		"editor.renderWhitespace": "all",
+		"editor.rulers": [
+			100
+		],
+		"editor.detectIndentation": false,
+		"editor.insertSpaces": false,
+		"[c]": {
+			"editor.tabSize": 8, // Zephyr uses hard tabs, width 8
+			"editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+		},
+		"[dts]": {
+			"editor.insertSpaces": true,
+			"editor.tabSize": 8
+		},
+		// ---- Serial console ----
+		"vscode-serial-monitor.customBaudRates": [115200],
+		"vscode-serial-monitor.lineEnding": "\r\n"
+	}
+}

@@ -1,0 +1,42 @@
+CompileFlags:
+  # Point at the Workbench build config you want indexed.
+  # Workbench nests builds as build/<build-config-name>/
+  CompilationDatabase: build/primary
+
+  Remove:
+    - -fno-reorder-functions
+    - -fno-printf-return-value
+    - -fno-defer-pop
+    - -fconserve-stack
+    - -mfp16-format=*
+    - --param=*
+    - -moutline-atomics
+    - -fno-freestanding
+    - -Werror=*
+    - -Wno-alloc-size-larger-than
+    - -Wno-pointer-sign
+
+  Add:
+    - -Wno-unknown-warning-option
+    - -Wno-unknown-attributes
+    - -Wno-ignored-optimization-argument
+    - -ferror-limit=0
+
+Diagnostics:
+  # Zephyr headers pull in enormous transitive trees; these two are pure noise here
+  UnusedIncludes: None
+  MissingIncludes: None
+  ClangTidy:
+    Add: [bugprone-*, performance-*, misc-*]
+    Remove:
+      - bugprone-easily-swappable-parameters
+      - bugprone-macro-parentheses
+      - misc-no-recursion
+
+Index:
+  StandardLibrary: No
+
+InlayHints:
+  Enabled: true
+  ParameterNames: true
+  DeducedTypes: false

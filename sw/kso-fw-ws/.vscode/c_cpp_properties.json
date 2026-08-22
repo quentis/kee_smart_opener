@@ -1,0 +1,12 @@
+{
+  "configurations": [
+    {
+      "name": "Zephyr Workbench",
+      "compileCommands": [
+        "${workspaceFolder}/kso-fw/build/primary/compile_commands.json"
+      ],
+      "compilerPath": "${workspaceFolder}/../../../../zephyr-sdks/zephyr-sdk-1.0.1/gnu/riscv64-zephyr-elf/bin/riscv64-zephyr-elf-gcc.exe"
+    }
+  ],
+  "version": 4
+}
