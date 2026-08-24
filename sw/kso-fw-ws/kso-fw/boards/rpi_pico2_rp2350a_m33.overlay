@@ -1,0 +1,94 @@
+#include <zephyr/dt-bindings/pinctrl/rpi-pico-rp2350a-pinctrl.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/pwm/pwm.h>
+
+/ {
+	leds {
+		compatible = "gpio-leds";
+		status = "okay";
+
+		led_error: led-error {
+			gpios = <&pico_header 12 GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	pwmleds {
+		compatible = "pwm-leds";
+		status = "okay";
+
+		pwm_led_blue: pwm-led-blue { pwms = <&pwm 9 PWM_USEC(1000) PWM_POLARITY_INVERTED>; }; /* GP9  - slice4B */
+		pwm_led_green: pwm-led-green { pwms = <&pwm 10 PWM_USEC(1000) PWM_POLARITY_INVERTED>; }; /* GP10 - slice5A */
+		pwm_led_red: pwm-led-red { pwms = <&pwm 11 PWM_USEC(1000) PWM_POLARITY_INVERTED>; }; /* GP11 - slice5B, shares freq w/ GP10 */
+	};
+
+	buttons: buttons {
+		compatible = "gpio-keys";
+
+		button_0: button-0 {
+			gpios = <&pico_header 22 GPIO_ACTIVE_LOW>;
+			label = "User Push Button 0";
+			zephyr,code = <INPUT_BTN_0>;
+		};
+
+		button_1: button-1 {
+			gpios = <&pico_header 26 GPIO_ACTIVE_LOW>;
+			label = "User Push Button 1";
+			zephyr,code = <INPUT_BTN_1>;
+		};
+
+		button_2: button-2 {
+			gpios = <&pico_header 27 GPIO_ACTIVE_LOW>;
+			label = "User Push Button 2";
+			zephyr,code = <INPUT_BTN_2>;
+		};
+
+		button_3: button-3 {
+			gpios = <&pico_header 28 GPIO_ACTIVE_LOW>;
+			label = "User Push Button 3";
+			zephyr,code = <INPUT_BTN_3>;
+		};
+	};
+
+	longpress {
+		compatible = "zephyr,input-longpress";
+		input = <&buttons>;
+		input-codes = <INPUT_BTN_0>, <INPUT_BTN_1>, <INPUT_BTN_2>, <INPUT_BTN_3>;
+		short-codes = <INPUT_KEY_0>, <INPUT_KEY_1>, <INPUT_KEY_2>, <INPUT_KEY_3>;
+		long-codes  = <INPUT_KEY_A>, <INPUT_KEY_B>, <INPUT_KEY_C>, <INPUT_KEY_D>;
+		long-delay-ms = <1000>;
+	};
+};
+
+&pinctrl {
+	pwm_multi_default: pwm-multi-default {
+		group1 {
+			pinmux = <PWM_4B_P9>, <PWM_5A_P10>, <PWM_5B_P11>;
+		};
+	};
+};
+
+&pwm {
+	status = "okay";
+	pinctrl-0 = <&pwm_multi_default>;
+	pinctrl-names = "default";
+	divider-int-4 = <150>;
+	divider-int-5 = <150>;
+};
+
+&adc {
+	status = "disabled";
+};
+
+&spi0 {
+	status = "disabled";
+};
+
+&i2c0 {
+	status = "disabled";
+};
+
+&i2c1 {
+	status = "disabled";
+};
+

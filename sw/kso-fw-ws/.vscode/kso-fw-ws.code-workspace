@@ -82,6 +82,9 @@
 		},
 		// ---- Serial console ----
 		"vscode-serial-monitor.customBaudRates": [115200],
-		"vscode-serial-monitor.lineEnding": "\r\n"
+		"vscode-serial-monitor.lineEnding": "\r\n",
+		"cmake.ignoreCMakeListsMissing": true,
+		"cmake.enableAutomaticKitScan": false,
+		"cmake.sourceDirectory": "${workspaceFolder}/nonexistent"
 	}
 }
