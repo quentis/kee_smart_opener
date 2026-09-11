@@ -2,6 +2,8 @@ manifest:
   remotes:
     - name: zephyrproject
       url-base: https://github.com/zephyrproject-rtos
+    - name: quentis
+      url-base: https://github.com/quentis
   projects:
     - name: zephyr
       repo-path: zephyr
@@ -19,5 +21,11 @@ manifest:
           - tf-psa-crypto
           - hal_rpi_pico
       revision: v4.4.2
+    - name: cc1101
+      repo-path: cc1101
+      remote: quentis
+      import:
+        path-prefix: deps
+      revision: kee_smart_opener_test
   self:
     path: manifest
