@@ -1,0 +1,15 @@
+clippy
+codegen
+DPRAM
+gpios
+heapless
+longpress
+pico
+pinctrl
+pinmux
+pwmleds
+pwms
+rustup
+test
+usbd
+USEC
