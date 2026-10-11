@@ -1,0 +1,62 @@
+{
+    "folders": [
+        {
+            "path": "."
+        }
+    ],
+    "settings": {
+        "git.allowForcePush": true,
+        "git.useForcePushWithLease": true,
+        "files.readonlyInclude": {
+            // Locks down all files inside the cargo registry source folder
+            "**/.cargo/registry/src/**": true,
+            // (Optional) Lock down the rust toolchain source code too
+            "**/.rustup/toolchains/**": true
+        },
+        // Enable format on save for Rust (uses rustfmt)
+        "[rust]": {
+            // Set to "offUnlessPressed" to reduce the visual clutter of inlay hints
+            "editor.inlayHints.enabled": "offUnlessPressed",
+            "editor.defaultFormatter": "rust-lang.rust-analyzer",
+            "editor.formatOnSave": true,
+            "editor.renderWhitespace": "all",
+            "editor.rulers": [
+                {
+                    "column": 100,
+                    "color": "#404040"
+                }
+            ]
+        },
+        // Tell rust-analyzer to use Clippy, Rust's official linter, to catch common mistakes
+        "rust-analyzer.check.command": "clippy",
+        // Enable inlay hints (shows inferred types and parameter names)
+        "rust-analyzer.inlayHints.typeHints.enable": true,
+        "rust-analyzer.inlayHints.parameterHints.enable": true,
+        "rust-analyzer.inlayHints.genericParameterHints.type.enable": true,
+        "rust-analyzer.inlayHints.chainingHints.enable": true,
+        // Make Error Lens play nicely with Rust's multi-line errors
+        "errorLens.fontStyleItalic": true,
+        "errorLens.delay": 500,
+        // Exclude the compiled target folder from VS Code search to improve performance
+        "search.exclude": {
+            "**/target": true
+        },
+        "files.exclude": {
+            "**/target": true
+        },
+        "cSpell.customDictionaries": {
+            "project-dict": {
+                "name": "project-dict",
+                "path": "${workspaceFolder}/project-dict.txt",
+                "addWords": true,
+            },
+        },
+        "cSpell.ignorePaths": [
+            // Locks down all files inside the cargo registry source folder
+            "**/.cargo/registry/src/**",
+            // (Optional) Lock down the rust toolchain source code too
+            "**/.rustup/toolchains/**",
+        ],
+        "rust-analyzer.linkedProjects": []
+    }
+}

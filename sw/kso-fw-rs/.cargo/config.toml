@@ -1,0 +1,31 @@
+[build]
+
+# Target is the Cortex-M33 with FPU enabled
+# Note: Target shall be installed via `rustup target add thumbv8m.main-none-eabihf`
+target = "thumbv8m.main-none-eabihf"
+
+[target.thumbv8m.main-none-eabihf]
+# -------------------------------------------------------------------------
+# RUNNER CONFIGURATION (Choose Option 1 OR Option 2)
+# -------------------------------------------------------------------------
+
+# OPTION 1: Flashing over USB (Standard method)
+# Use this if you are holding the BOOTSEL button and plugging in via USB.
+# It automatically converts the ELF file to UF2 and copies it to the Pico.
+# runner = "elf2uf2-rs -d"
+
+# OPTION 2: Flashing via a Debug Probe (Advanced/Debugging method)
+# Use this if you are using a secondary Pico (Picoprobe) or an SWD debugger.
+runner = "probe-rs run --chip RP235x"
+
+# -------------------------------------------------------------------------
+# LINKER CONFIGURATION
+# -------------------------------------------------------------------------
+rustflags = [
+    # Compiler optimizations
+    "-C", "target-cpu=cortex-m33", # Target the Cortex-M33 CPU
+
+    # Linker directives
+    "-C", "link-arg=-Tlink.x", # Use link.x script with cortex/m/rt to lay out memory
+    "-C", "link-arg=--nmagic", # Prevent padding memory between sections to save space
+]
