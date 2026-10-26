@@ -1,176 +1,159 @@
-// This is a no_std application, so it does not link the Rust standard library.
-// Note: #![no_std] is an inner attribute that applies to the entire crate.
 #![no_std]
-// The main is provided by the runtime, so we don't use the Rust main function entry point
 #![no_main]
 
-// Panic handler function is required for no_std applications to handle panic situations gracefully
-use core::panic::PanicInfo;
+use cc1101_embassy::{Cc1101, Modulation, PacketLength, RadioConfig, SyncMode, TxPower};
+use defmt as _;
+use defmt::{debug, error, info, warn};
+use defmt_rtt as _;
+use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
+use embassy_executor::Spawner;
+use embassy_rp::binary_info;
+use embassy_rp::gpio::{Input, Level, Output, Pull};
+use embassy_rp::peripherals::{DMA_CH0, DMA_CH1};
+use embassy_rp::spi::{self, Phase, Polarity, Spi};
+use embassy_rp::{bind_interrupts, dma};
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::mutex::Mutex;
+use embassy_time::Timer;
+use embedded_hal_async::spi::{Operation, SpiDevice as _};
+use panic_probe as _;
+use static_cell::StaticCell;
 
-// Alias our HAL
-use rp235x_hal::{
-    self as hal, Clock,
-    gpio::{
-        Function,
-        PinState::{High, Low},
-        PullDown, PullNone, PullUp,
-    },
-};
+mod hcs300;
+use hcs300::Hcs300Packet;
 
-// Bring GPIO structs/functions into scope
-use hal::gpio::{FunctionSpi, Pin};
+use crate::hcs300::{Hcs300ButtonStatus, Hcs300SerialNumber};
 
-// USB Device and Communication Class Device (CDC) support
-use usb_device::{class_prelude::*, prelude::*};
-use usbd_serial::SerialPort;
+type AsyncSpi0 = Spi<'static, embassy_rp::peripherals::SPI0, spi::Async>;
 
-// SPI structs and functions
-use embedded_hal::{digital::InputPin, spi::SpiBus, spi::SpiDevice};
-use embedded_hal_bus::spi::ExclusiveDevice;
+static SPI_BUS: StaticCell<Mutex<NoopRawMutex, AsyncSpi0>> = StaticCell::new();
 
-// Used for the rate/frequency type
-use hal::fugit::RateExtU32;
+bind_interrupts!(struct Irqs {
+    DMA_IRQ_0 => dma::InterruptHandler<DMA_CH0>, dma::InterruptHandler<DMA_CH1>;
+});
 
-// For working with non-heap strings
-use core::fmt::Write;
-use heapless::String;
+#[embassy_executor::main]
+async fn main(_spawner: Spawner) {
+    info!("Starting...");
+    let p = embassy_rp::init(Default::default());
 
-// Custom panic handler: just loop forever
-#[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
-    loop {}
-}
+    let mut led_red_pin = Output::new(p.PIN_9, Level::Low);
+    let mut led_red_green = Output::new(p.PIN_10, Level::Low);
+    let mut led_red_blue = Output::new(p.PIN_11, Level::Low);
 
-// Copy boot metadata to .start_block so boot ROM knows how to boot our program
-#[unsafe(link_section = ".start_block")]
-#[used]
-pub static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();
-
-// Set external crystal frequency
-const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
-
-// Main entrypoint (custom defined for embedded targets)
-#[hal::entry]
-fn main() -> ! {
-    // Get ownership of hardware peripherals
-    let mut pac = hal::pac::Peripherals::take().unwrap();
-
-    // Set up the watchdog and clocks
-    let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
-    let clocks = hal::clocks::init_clocks_and_plls(
-        XOSC_CRYSTAL_FREQ,
-        pac.XOSC,
-        pac.CLOCKS,
-        pac.PLL_SYS,
-        pac.PLL_USB,
-        &mut pac.RESETS,
-        &mut watchdog,
-    )
-    .ok()
-    .unwrap();
-
-    // Single-cycle I/O block (fast GPIO)
-    let sio = hal::Sio::new(pac.SIO);
-
-    // Split off ownership of Peripherals struct, set pins to default state
-    let pins = hal::gpio::Pins::new(
-        pac.IO_BANK0,
-        pac.PADS_BANK0,
-        sio.gpio_bank0,
-        &mut pac.RESETS,
-    );
-
-    // Configure button pins
-    let mut btn0_pin = pins.gpio22.into_floating_input();
-    let mut btn1_pin = pins.gpio26.into_floating_input();
-    let mut btn2_pin = pins.gpio27.into_floating_input();
-    let mut btn3_pin = pins.gpio28.into_floating_input();
-
-    // Configure LEDs
-    let mut led_err = pins.gpio12.into_push_pull_output_in_state(High);
-    let mut rgb_led_red = pins.gpio11.into_push_pull_output_in_state(High);
-    let mut rgb_led_green = pins.gpio10.into_push_pull_output_in_state(High);
-    let mut rgb_led_blue = pins.gpio9.into_push_pull_output_in_state(High);
+    let mut led_red_blue = Output::new(p.PIN_12, Level::Low);
 
     // Configure CC1101 pins
-    let mut c1101_en_pin = pins.gpio15.into_push_pull_output_in_state(High);
-    let mut c1101_tx_en_pin = pins.gpio14.into_push_pull_output_in_state(Low);
-    let mut c1101_rx_en_pin = pins.gpio13.into_push_pull_output_in_state(Low);
+    let mut cc1101_en = Output::new(p.PIN_15, Level::Low);
+    let mut cc1101_tx_en = Output::new(p.PIN_14, Level::Low);
+    let mut cc1101_rx_en = Output::new(p.PIN_13, Level::Low);
 
-    // Configure SPI pins
-    let spi0_tx = pins.gpio19.into_function::<hal::gpio::FunctionSpi>();
-    let spi0_sck = pins.gpio18.into_function::<hal::gpio::FunctionSpi>();
-    let spi0_rx = pins.gpio16.into_function::<hal::gpio::FunctionSpi>();
-    let spi_cs = pins.gpio17.into_function::<hal::gpio::FunctionSioOutput>();
+    let mut spi_config = spi::Config::default();
+    spi_config.frequency = 1_000_000;
+    spi_config.phase = Phase::CaptureOnFirstTransition;
+    spi_config.polarity = Polarity::IdleLow;
 
-    // Configure SPI pins
-    let spi_bus = hal::spi::Spi::<_, _, _, 8>::new(pac.SPI0, (spi0_tx, spi0_rx, spi0_sck));
+    let cs = Output::new(p.PIN_17, Level::High);
 
-    let spi_bus = spi_bus.init(
-        &mut pac.RESETS,
-        clocks.peripheral_clock.freq(),
-        1.MHz(),
-        embedded_hal::spi::MODE_0,
+    // Enable the LDO on e07-433m20s_board (C1101 chip)
+    cc1101_en.set_high();
+
+    let spi_bus = Spi::new(
+        p.SPI0, p.PIN_18, p.PIN_19, p.PIN_16, p.DMA_CH0, p.DMA_CH1, Irqs, spi_config,
     );
+    let spi_bus = SPI_BUS.init(Mutex::new(spi_bus));
+    let mut spi_dev = SpiDevice::new(spi_bus, cs);
 
-    let mut spi = ExclusiveDevice::new_no_delay(spi_bus, spi_cs).unwrap();
+    let mut btn0 = Input::new(p.PIN_22, Pull::None);
 
-    // Initialize and take ownership of the SPI peripheral
+    let gdo0 = Input::new(p.PIN_20, Pull::None);
+    let gdo2 = Input::new(p.PIN_21, Pull::None);
 
-    // Move ownership of TIMER0 peripheral to create Timer struct
-    let timer = hal::Timer::new_timer0(pac.TIMER0, &mut pac.RESETS, &clocks);
+    let packet = Hcs300Packet {
+        encrypted: 0,
+        serial_number: Hcs300SerialNumber::new(0).unwrap(),
+        button_status: Hcs300ButtonStatus::new(0).unwrap(),
+        vlow: false,
+        repeat: false,
+    };
+    let mut encoded_packet = [0; Hcs300Packet::CODEWORD_BYTES];
+    packet
+        .encode(&mut encoded_packet)
+        .expect("Keeloq packet encoding failed!");
 
-    let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
-        pac.USB,
-        pac.USB_DPRAM,
-        clocks.usb_clock,
-        true,
-        &mut pac.RESETS,
-    ));
-
-    // Configure USB as CDC
-    let mut serial = SerialPort::new(&usb_bus);
-
-    // Create a USB device with a fake VID/PID
-    let mut usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x16c0, 0x27dd))
-        .strings(&[StringDescriptors::default()
-            .manufacturer("Fake company")
-            .product("Serial port")
-            .serial_number("Test")])
-        .unwrap()
-        .device_class(usbd_serial::USB_CLASS_CDC)
-        .build();
-
-    // Read buffer
-    let mut rx_buf = [0u8; 64];
-    let mut output = String::<64>::new();
-
-    // Superloop
-    let mut timestamp = timer.get_counter();
-
-    loop {
-        // Needs to be called at least every 10ms
-        if usb_dev.poll(&mut [&mut serial]) {
-            match serial.read(&mut rx_buf) {
-                Ok(0) => {}
-                Ok(_count) => {}
-                Err(_e) => {}
+    let mut cc1101 = match Cc1101::new(spi_dev, gdo0, gdo2).await {
+        Ok(dev) => dev,
+        Err(e) => {
+            error!("CC1101 init failed: {:?}", e);
+            loop {
+                Timer::after_millis(1000).await;
             }
         }
+    };
 
-        // Send message in every second (non-blocking)
-        if (timer.get_counter() - timestamp).to_millis() >= 1_000 {
-            timestamp = timer.get_counter();
-            let _ = serial.write(b"hello!\r\n");
+    let radio_config = RadioConfig::new()
+        .frequency_hz(433_920_000)
+        .baud_rate(2500)
+        .modulation(Modulation::Ook)
+        .sync_mode(SyncMode::None)
+        .sync_word(0xD391)
+        .packet_length(PacketLength::Fixed(Hcs300Packet::CODEWORD_BYTES as u8))
+        .append_status(false)
+        .crc_enable(false)
+        .tx_power(TxPower::Dbm0);
 
-            let mut buffer: [u8; 2] = [0xF1, 0x00];
-            if spi.transfer_in_place(&mut buffer).is_ok() {
-                output.clear();
-                write!(&mut output, "Version number: {:}\r\n", buffer[1]).unwrap();
-                let _ = serial.write(output.as_bytes());
-            } else {
-                let _ = serial.write(b"spi transfer failed!\r\n");
-            }
+    if let Err(spi_err) = cc1101.configure(&radio_config).await {
+        error!("SPI error during configure: {:?}", spi_err);
+        loop {
+            Timer::after_millis(1000).await;
         }
     }
+
+    if let Err(err) = cc1101.idle().await {
+        error!("Error during idle transition: {:?}", err)
+    }
+
+    loop {
+        // btn0.wait_for_low().await;
+        // info!("Button 0 pressed");
+        // btn0.wait_for_high().await;
+
+        //     let mut buf = [0u8; 1];
+        //     spi_dev
+        //         .transaction(&mut [
+        //             Operation::Write(&[0x31 | 0x80 | 0x40]),
+        //             Operation::Read(&mut buf),
+        //         ])
+        //         .await
+        //         .unwrap();
+        //     info!("Version number: {}", buf);
+        // Timer::after_millis(100).await;
+        // let test_packet = [0x55; 5];
+        cc1101_tx_en.set_high();
+        Timer::after_millis(10).await;
+        match cc1101.transmit(&encoded_packet[..]).await {
+            Ok(()) => {
+                info!("Keeloq packet transmitted: {=[u8]:02x}", encoded_packet[..])
+            }
+            Err(err) => {
+                error!("Error during transmission: {:?}", err)
+            }
+        }
+        Timer::after_millis(10).await;
+        cc1101_tx_en.set_low();
+
+        if let Err(err) = cc1101.idle().await {
+            error!("Error during idle transition: {:?}", err)
+        }
+        // Timer::after_millis(100).await;
+        // cc1101_tx_en.set_low();
+
+        Timer::after_millis(3000).await;
+    }
+
+    // Configure button pins
+    // let mut btn0_pin = pins.gpio22.into_floating_input();
+    // let mut btn1_pin = pins.gpio26.into_floating_input();
+    // let mut btn2_pin = pins.gpio27.into_floating_input();
+    // let mut btn3_pin = pins.gpio28.into_floating_input();
 }

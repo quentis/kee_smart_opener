@@ -16,7 +16,16 @@ target = "thumbv8m.main-none-eabihf"
 
 # OPTION 2: Flashing via a Debug Probe (Advanced/Debugging method)
 # Use this if you are using a secondary Pico (Picoprobe) or an SWD debugger.
-runner = "probe-rs run --chip RP235x"
+runner = [
+    "probe-rs",
+    "run",
+    "--chip",
+    "RP235x",
+    "--speed",
+    "4000",
+    "--log-format",
+    "{t} {L} {s}"
+]
 
 # -------------------------------------------------------------------------
 # LINKER CONFIGURATION
@@ -26,6 +35,13 @@ rustflags = [
     "-C", "target-cpu=cortex-m33", # Target the Cortex-M33 CPU
 
     # Linker directives
-    "-C", "link-arg=-Tlink.x", # Use link.x script with cortex/m/rt to lay out memory
-    "-C", "link-arg=--nmagic", # Prevent padding memory between sections to save space
+    "-C", "link-arg=-Tlink.x",  # Use link.x script with cortex/m/rt to lay out memory
+    "-C", "link-arg=--nmagic",  # Prevent padding memory between sections to save space
+    "-C", "link-arg=-Tdefmt.x", # Use defmt.x script for defmt-related memory layout
 ]
+
+# -------------------------------------------------------------------------
+# ENVIRONMENT VARIABLES
+# -------------------------------------------------------------------------
+[env]
+DEFMT_LOG = "debug"

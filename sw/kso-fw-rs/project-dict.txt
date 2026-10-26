@@ -1,8 +1,10 @@
 clippy
 codegen
+defmt
 DPRAM
 gpios
 heapless
+Keeloq
 longpress
 pico
 pinctrl
@@ -13,3 +15,5 @@ rustup
 test
 usbd
 USEC
+vlow
+VLOW
