@@ -1,2 +1,6 @@
 # Build artifacts
 target
+
+# Vendored crates: cargo's cache marker and the crates' own lock files (cargo ignores them for path dependencies)
+vendor/**/.cargo-ok
+vendor/**/Cargo.lock
