@@ -1,4 +1,4 @@
-"""Reads the HCS300 pulse measurement PIO program and its settings out of the firmware sources.
+"""Reads the HCS300 capture PIO program and its settings out of the firmware sources.
 
 The program is the .pio file that main.rs includes with pio_file!(), the settings are constants in
 main.rs, so there is no second copy to keep in sync. Set KSO_FIRMWARE_DIR to use another copy of the

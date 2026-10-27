@@ -51,14 +51,14 @@ const HCS300_PIO_SENTINEL: u32 = u32::MAX;
 /// pulse duration is `HCS300_TIMEOUT_TICKS - word`. If the line stays at one level for the whole
 /// timeout, `HCS300_PIO_SENTINEL` is pushed instead (and a stuck high line is waited out).
 ///
-/// The program and its cycle budget are in `pio/hcs300_pulse.pio`. One tick is 5 PIO cycles (5 MHz
+/// The program and its cycle budget are in `pio/hcs300_capture.pio`. One tick is 5 PIO cycles (5 MHz
 /// clock). The simulation tests in `test/sim/pio` read the same file.
 fn setup_pio_task_sm0<'d>(
     pio: &mut Common<'d, PIO0>,
     sm: &mut StateMachine<'d, PIO0, 0>,
     hcs300_pwm_pin: Peri<'d, impl PioPin>,
 ) {
-    let prog = pio_file!("pio/hcs300_pulse.pio");
+    let prog = pio_file!("pio/hcs300_capture.pio");
     let mut cfg = pio::Config::default();
     let loaded_prog = &pio.load_program(&prog.program);
     debug!("HCS300 PIO0 origin: {}", loaded_prog.origin);

@@ -79,7 +79,7 @@ const SINGLES: &[&str] = &[
 ];
 
 /// Whole programs: labels, forward references, delays and wrap. Includes the generations of the
-/// HCS300 pulse measurement program that were evaluated, the last one is the firmware's.
+/// HCS300 capture program that were evaluated, the last one is the firmware's.
 const PROGRAMS: &[(&str, &str)] = &[
     (
         "hcs300 v2: idle wait only, 2 cycles per tick",

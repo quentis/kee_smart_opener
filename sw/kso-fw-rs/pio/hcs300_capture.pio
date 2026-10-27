@@ -1,4 +1,4 @@
-; HCS300 pulse measurement
+; HCS300 capture
 ;
 ; Measures every high and low pulse of the HCS300 PWM output and pushes one word per edge to the RX FIFO:
 ; the ticks left of a countdown that starts at T, so the pulse duration is T - word. T is pulled once from
@@ -15,7 +15,7 @@
 ; Both are 5 cycles per decrement. The delay on the first `wait` gives the first pulse after a timeout
 ; the same latency as the following ones.
 
-.program hcs300_pulse
+.program hcs300_capture
     pull
 .wrap_target
 idle:

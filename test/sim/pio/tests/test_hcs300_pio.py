@@ -1,4 +1,4 @@
-"""Behaviour of the firmware's HCS300 pulse measurement PIO program, simulated on pioemu.
+"""Behaviour of the firmware's HCS300 capture PIO program, simulated on pioemu.
 
 The PIO program pushes one word per edge, `timeout_ticks - word` is the duration of the pulse that
 just ended in ticks (1 tick = 1 us). If the line stays at one level for `timeout_ticks`, it pushes

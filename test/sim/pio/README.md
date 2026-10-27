@@ -1,6 +1,6 @@
 # PIO simulation tests
 
-Simulation tests of the HCS300 pulse measurement PIO program of `sw/kso-fw-rs`. They run on
+Simulation tests of the HCS300 capture PIO program of `sw/kso-fw-rs`, which measures the pulses. They run on
 [pioemu](https://pypi.org/project/rp2040-pio-emulator/), a Python PIO emulator, so no hardware is needed.
 
 ## Run
@@ -17,7 +17,7 @@ run takes about 40 s, the emulator is slow.
 ## What is tested
 
 The PIO program is the file that `setup_pio_task_sm0` in `sw/kso-fw-rs/src/main.rs` includes with `pio_file!`
-(`sw/kso-fw-rs/pio/hcs300_pulse.pio`). The settings come from `main.rs`: `HCS300_TIMEOUT_TICKS`,
+(`sw/kso-fw-rs/pio/hcs300_capture.pio`). The settings come from `main.rs`: `HCS300_TIMEOUT_TICKS`,
 `HCS300_PIO_SENTINEL` and `calculate_pio_clock_divider`. So the tests always simulate what the firmware
 contains. Set `KSO_FIRMWARE_DIR` to simulate another copy of the firmware crate.
 
