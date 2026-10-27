@@ -1,0 +1,9 @@
+[package]
+name = "golden-gen"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# Same assembler version as embassy-rp's pio_asm! (see sw/kso-fw-rs/Cargo.lock)
+pio-parser = "=0.3.0"

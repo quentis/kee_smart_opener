@@ -1,0 +1,22 @@
+[project]
+name = "kso-pio-sim-tests"
+version = "0.1.0"
+description = "Simulation tests of the HCS300 PIO program in sw/kso-fw-rs"
+requires-python = ">=3.11"
+dependencies = [
+    "rp2040-pio-emulator>=0.88.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
+[tool.uv]
+# Test project only: install the dependencies, do not build or install the project itself
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"
