@@ -25,7 +25,7 @@ use panic_probe as _;
 use static_cell::StaticCell;
 
 mod hcs300;
-use hcs300::Hcs300Packet;
+use hcs300::{Hcs300Decoder, Hcs300Packet};
 
 use crate::hcs300::{Hcs300ButtonStatus, Hcs300SerialNumber};
 
@@ -38,6 +38,23 @@ bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => pio::InterruptHandler<PIO0>;
 });
 
+/// Idle/stuck timeout of the HCS300 PIO program in ticks (1 tick = 1 us). Has to be longer than the
+/// longest legitimate pulse, which is the header (10 TE, up to 6.6 ms).
+const HCS300_TIMEOUT_TICKS: u32 = 10_000;
+
+/// Word pushed by the HCS300 PIO program when the line was idle or stuck for the whole timeout
+const HCS300_PIO_SENTINEL: u32 = u32::MAX;
+
+/// Measures the high and low pulses of the HCS300 PWM output.
+///
+/// For every edge one word is pushed to the RX FIFO: the ticks left of the timeout counter, so the
+/// pulse duration is `HCS300_TIMEOUT_TICKS - word`. If the line stays at one level for the whole
+/// timeout, `HCS300_PIO_SENTINEL` is pushed instead (and a stuck high line is waited out).
+///
+/// One tick is 5 PIO cycles (5 MHz clock). Every cycle between an edge and the next sample is
+/// counted: the loops take exactly one tick per iteration, and each edge handler has a
+/// `jmp x--` to the next instruction whose only job is to count the handler's time as one tick.
+/// The `wait` delay gives the first pulse after a timeout the same latency as the following ones.
 fn setup_pio_task_sm0<'d>(
     pio: &mut Common<'d, PIO0>,
     sm: &mut StateMachine<'d, PIO0, 0>,
@@ -45,53 +62,36 @@ fn setup_pio_task_sm0<'d>(
 ) {
     #[rustfmt::skip]
     let prog = pio_asm!(
+        "pull",
         ".wrap_target",
-        "init:",
-            "pull",
-        "load_idle_timeout:",
-            "mov y, osr",
-            "wait 0 pin 0",
-        "wait_idle:",
-            "jmp pin load_idle_timeout",
-            "jmp y-- wait_idle [3]",
-        "wait_codeword_start:",
-            "set x, 0",
-            "mov x, ~x",
-            "mov y, osr",
-            "wait 1 pin 0",
-        "wait_low_1:",
-            "jmp pin wait_low_2",
-            "jmp falling_edge",
-        "wait_low_2:",
-            "jmp y-- wait_low_3",
-            "jmp stuck_high",
-        "wait_low_3:",
-            "jmp x-- wait_low_1 [2]",
-        "falling_edge:",
-            "in x 32",
+        "idle:",
+            "wait 1 pin 0 [3]",
+        "high:",
+            "mov x, osr",
+            "jmp x-- hi_loop",
+        "hi_loop:",
+            "jmp x-- hi_chk [3]",
+            "jmp timeout",
+        "hi_chk:",
+            "jmp pin hi_loop",
+            "in x, 32",
             "push noblock",
-            "mov y, osr",
-            "jmp x-- wait_high_1",
-        "wait_high_1:",
-            "jmp pin rising_edge",
-        "wait_high_2:",
-            "jmp y-- wait_high_3",
-            "irq wait 0 ",
-            "jmp wait_codeword_start",
-        "wait_high_3:",
-            "jmp x-- wait_high_1 [2]",
-        "rising_edge:",
-            "in x 32",
+            "mov x, osr",
+            "jmp x-- lo_loop",
+        "lo_loop:",
+            "jmp pin rising",
+            "jmp x-- lo_loop [3]",
+        "timeout:",
+            "in x, 32",
             "push noblock",
-            "mov y, osr [1]",
-            "jmp x-- wait_low_1",
-        "stuck_high:",
             "wait 0 pin 0",
-            "irq set 1",
-            "jmp wait_codeword_start",
+            "jmp idle",
+        "rising:",
+            "in x, 32",
+            "push noblock",
+            "jmp high",
         ".wrap",
     );
-    const PROG_START_OFFSET: u8 = 4;
     let mut cfg = pio::Config::default();
     let loaded_prog = &pio.load_program(&prog.program);
     debug!("HCS300 PIO0 origin: {}", loaded_prog.origin);
@@ -107,23 +107,27 @@ fn setup_pio_task_sm0<'d>(
 async fn pio_task_sm0(mut sm: StateMachine<'static, PIO0, 0>) {
     sm.set_enable(true);
 
-    sm.tx().push(10_000);
-    let addr = sm.get_addr();
-    debug!("Address: {}", addr);
-    let mut count = 0;
-    let mut last_record: u32 = 0xFFFF_FFFF;
+    sm.tx().push(HCS300_TIMEOUT_TICKS);
+    let mut decoder = Hcs300Decoder::new();
     loop {
-        let v = sm.rx().wait_pull().await;
-        let addr = sm.get_addr();
-        debug!("Address: {}", addr);
-        info!(
-            "Pulled {} from FIFO -> {} (count: {})",
-            !v,
-            last_record - v,
-            count
-        );
-        count += 1;
-        last_record = v;
+        let word = sm.rx().wait_pull().await;
+        if word == HCS300_PIO_SENTINEL {
+            decoder.reset();
+            continue;
+        }
+
+        let ticks = HCS300_TIMEOUT_TICKS.saturating_sub(word);
+        if let Some(packet) = decoder.push(ticks) {
+            info!(
+                "HCS300: serial {=u32:08x}, buttons {=u8:04b}, vlow {}, repeat {}, encrypted {=u32:08x}, TE {} us",
+                packet.serial_number.get(),
+                packet.button_status.get(),
+                packet.vlow,
+                packet.repeat,
+                packet.encrypted,
+                decoder.te()
+            );
+        }
     }
 }
 

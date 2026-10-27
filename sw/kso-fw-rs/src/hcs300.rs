@@ -229,6 +229,180 @@ impl Hcs300Packet {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DecoderState {
+    /// Looking for preamble + header
+    Hunt,
+    /// Header seen, collecting the 66 PWM data bits
+    Data,
+}
+
+/// Decodes HCS300 code words from a stream of pulse durations.
+///
+/// Every pulse is fed with [`Hcs300Decoder::push`] in transmission order: high, low, high, ...,
+/// starting with a high pulse. Durations may be in any unit as long as it is consistent.
+///
+/// Code words are framed from the signal itself, not from timeouts: a header is a low pulse of
+/// about 10 TE that follows [`Self::PREAMBLE_PULSES`] equal-length preamble pulses. TE is measured
+/// from those preamble pulses, so every baud rate setting and oscillator tolerance is handled.
+/// Whatever does not fit (aborted code word, noise, stuck line) sends the decoder back to hunting
+/// for the next header.
+///
+/// After the line was idle or stuck, call [`Hcs300Decoder::reset`] so that the next pulse is known
+/// to be a high one.
+#[derive(Debug, Clone, Copy)]
+pub struct Hcs300Decoder {
+    state: DecoderState,
+
+    /// Last pulses seen while hunting (ring buffer), preamble candidates
+    history: [u32; Self::PREAMBLE_PULSES],
+    history_len: usize,
+    history_pos: usize,
+
+    /// The next pulse is a low pulse
+    next_is_low: bool,
+
+    /// Basic pulse element measured from the preamble
+    te: u32,
+
+    /// High pulse of the data bit being received
+    high: u32,
+
+    /// Number of data bits received
+    bit_count: usize,
+
+    /// Data bits 0..64 in transmission order (LSb first)
+    data: u64,
+
+    /// Data bits 64..66: VLOW, RPT
+    status: u8,
+}
+
+impl Hcs300Decoder {
+    /// Equal-length pulses required before a header is accepted
+    pub const PREAMBLE_PULSES: usize = 8;
+
+    pub const fn new() -> Self {
+        Self {
+            state: DecoderState::Hunt,
+            history: [0; Self::PREAMBLE_PULSES],
+            history_len: 0,
+            history_pos: 0,
+            next_is_low: false,
+            te: 0,
+            high: 0,
+            bit_count: 0,
+            data: 0,
+            status: 0,
+        }
+    }
+
+    /// Basic pulse element (TE) of the current or last code word, in the unit of the input pulses
+    pub const fn te(&self) -> u32 {
+        self.te
+    }
+
+    /// Drops the code word in progress: the line was idle or stuck and the next pulse is a high one
+    pub fn reset(&mut self) {
+        self.hunt();
+        self.next_is_low = false;
+    }
+
+    /// Feeds the next pulse, returns the packet when it completes a code word
+    pub fn push(&mut self, duration: u32) -> Option<Hcs300Packet> {
+        let low = self.next_is_low;
+        self.next_is_low = !low;
+
+        match self.state {
+            DecoderState::Hunt => {
+                if low && self.history_len == Self::PREAMBLE_PULSES && self.accept_header(duration)
+                {
+                    self.state = DecoderState::Data;
+                    self.bit_count = 0;
+                    self.data = 0;
+                    self.status = 0;
+                } else {
+                    self.history[self.history_pos] = duration;
+                    self.history_pos = (self.history_pos + 1) % Self::PREAMBLE_PULSES;
+                    self.history_len = (self.history_len + 1).min(Self::PREAMBLE_PULSES);
+                }
+                None
+            }
+            DecoderState::Data if low => {
+                // Bit period is 3 TE. The low pulse of the last bit is the guard time, which is
+                // never waited for
+                if (self.high + duration).abs_diff(3 * self.te) * 4 > 3 * self.te {
+                    self.hunt();
+                }
+                None
+            }
+            DecoderState::Data => self.data_high(duration),
+        }
+    }
+
+    fn hunt(&mut self) {
+        self.state = DecoderState::Hunt;
+        self.history_len = 0;
+        self.history_pos = 0;
+    }
+
+    /// A header is a low pulse of 10 TE after preamble pulses of 1 TE each. Accepts +-30% on the
+    /// preamble and 7..13 TE for the header. Sets TE on success.
+    fn accept_header(&mut self, duration: u32) -> bool {
+        let te = self.history.iter().sum::<u32>() / Self::PREAMBLE_PULSES as u32;
+        let preamble_ok = self
+            .history
+            .iter()
+            .all(|&p| p * 10 >= te * 7 && p * 10 <= te * 13);
+        let header_ok = duration >= te * 7 && duration <= te * 13;
+        if te > 0 && preamble_ok && header_ok {
+            self.te = te;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// 1 TE high is a 1 bit, 2 TE high is a 0 bit (the low part is checked afterwards)
+    fn data_high(&mut self, duration: u32) -> Option<Hcs300Packet> {
+        if duration * 2 < self.te || duration * 2 > self.te * 5 {
+            self.hunt();
+            return None;
+        }
+        self.high = duration;
+
+        let bit = duration * 2 < self.te * 3;
+        if self.bit_count < 64 {
+            self.data |= (bit as u64) << self.bit_count;
+        } else {
+            self.status |= (bit as u8) << (self.bit_count - 64);
+        }
+        self.bit_count += 1;
+
+        if self.bit_count < Hcs300Packet::DATA_BITS {
+            return None;
+        }
+
+        // Complete on the last high pulse, its low part is the guard time
+        let fixed = (self.data >> 32) as u32;
+        let packet = Hcs300Packet {
+            serial_number: Hcs300SerialNumber(fixed & Hcs300SerialNumber::MASK),
+            button_status: Hcs300ButtonStatus(((fixed >> 28) as u8) & Hcs300ButtonStatus::MASK),
+            vlow: self.status & 1 != 0,
+            repeat: self.status & 2 != 0,
+            encrypted: self.data as u32,
+        };
+        self.hunt();
+        Some(packet)
+    }
+}
+
+impl Default for Hcs300Decoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 struct BitCursor<'a, const N: usize> {
     buf: &'a mut [u8; N],
     bit_pos: usize,
