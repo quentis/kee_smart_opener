@@ -3,7 +3,7 @@
 use embedded_hal_async::digital::Wait;
 use embedded_hal_async::spi::{Operation, SpiDevice};
 
-use crate::config::{PacketLength, RadioConfig};
+use crate::config::{Modulation, PacketLength, RadioConfig};
 use crate::error::Error;
 use crate::regs;
 
@@ -121,9 +121,20 @@ where
         // Channel
         self.write_reg(regs::CHANNR, config.channel).await?;
 
-        // TX power — load PA table index 0 only (simple non-ASK use)
-        self.write_reg(regs::FREND0, 0x10).await?; // PA table index = 0
-        self.write_patable(config.tx_power.patable_byte()).await?;
+        // TX power. OOK keys the PA: logic 1 uses PATABLE[PA_POWER], logic 0 uses
+        // PATABLE[0]. So for OOK, index 0 must be off (0x00) and index 1 the power.
+        // Other modulations use a single entry at index 0.
+        let power = config.tx_power.patable_byte();
+        match config.modulation {
+            Modulation::Ook => {
+                self.write_reg(regs::FREND0, 0x11).await?; // PA_POWER = 1
+                self.write_patable_ook(0x00, power).await?;
+            }
+            _ => {
+                self.write_reg(regs::FREND0, 0x10).await?; // PA_POWER = 0
+                self.write_patable(power).await?;
+            }
+        }
 
         // GDO0: assert when sync word received, de-assert at end of packet
         // This gives us a clean falling edge to wait on after TX/RX completes.
@@ -379,6 +390,16 @@ where
         self.spi
             .transaction(&mut [
                 Operation::Write(&[regs::PATABLE | regs::BURST, value]),
+            ])
+            .await
+            .map_err(Error::Spi)
+    }
+
+    /// Write PA table entries 0 (logic 0 level) and 1 (logic 1 level) for OOK.
+    async fn write_patable_ook(&mut self, off: u8, on: u8) -> Result<(), Error<SPI::Error>> {
+        self.spi
+            .transaction(&mut [
+                Operation::Write(&[regs::PATABLE | regs::BURST, off, on]),
             ])
             .await
             .map_err(Error::Spi)

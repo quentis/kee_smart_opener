@@ -18,6 +18,10 @@ cc1101-embassy = { version = "0.1.0", features = ["defmt"] }
 static_cell = "2.1.1"
 embedded-hal-async = "1.0.0"
 
+[patch.crates-io]
+# Local copy: OOK keys the PA via PATABLE[0] (off) and PATABLE[1] (power); see vendor/cc1101-embassy/src/driver.rs
+cc1101-embassy = { path = "vendor/cc1101-embassy" }
+
 [profile.dev]
 opt-level = 0
 debug = 2
