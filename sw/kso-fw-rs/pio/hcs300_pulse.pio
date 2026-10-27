@@ -1,0 +1,47 @@
+; HCS300 pulse measurement
+;
+; Measures every high and low pulse of the HCS300 PWM output and pushes one word per edge to the RX FIFO:
+; the ticks left of a countdown that starts at T, so the pulse duration is T - word. T is pulled once from
+; the TX FIFO. If the line stays at one level for all T ticks, the sentinel 0xFFFF_FFFF is pushed once
+; instead, and a stuck high line is waited out.
+;
+; The input pin is also the JMP pin. One tick is 5 PIO cycles (5 MHz clock = 1 us). The loops take exactly
+; one tick per iteration, and every cycle between an edge and the next sample has to be counted. So each
+; edge handler ends with a `jmp x--` to the next instruction, which is only there for its decrement.
+; Counted from the instruction that detects the edge:
+;   falling edge: in, push, mov, jmp x--, first sample of lo_loop at +5 cycles, 1 decrement
+;   rising edge:  in, push, jmp, mov, jmp x--, then x-- [3] and first sample of hi_loop at +10 cycles,
+;                 2 decrements
+; Both are 5 cycles per decrement. The delay on the first `wait` gives the first pulse after a timeout
+; the same latency as the following ones.
+
+.program hcs300_pulse
+    pull
+.wrap_target
+idle:
+    wait 1 pin 0 [3]
+high:
+    mov x, osr
+    jmp x-- hi_loop
+hi_loop:
+    jmp x-- hi_chk [3]
+    jmp timeout
+hi_chk:
+    jmp pin hi_loop
+    in x, 32
+    push noblock
+    mov x, osr
+    jmp x-- lo_loop
+lo_loop:
+    jmp pin rising
+    jmp x-- lo_loop [3]
+timeout:
+    in x, 32
+    push noblock
+    wait 0 pin 0
+    jmp idle
+rising:
+    in x, 32
+    push noblock
+    jmp high
+.wrap

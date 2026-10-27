@@ -10,7 +10,7 @@ use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
 use embassy_rp::gpio::{Input, Level, Output, Pull};
 use embassy_rp::peripherals::{DMA_CH0, DMA_CH1, PIO0};
-use embassy_rp::pio::program::pio_asm;
+use embassy_rp::pio::program::pio_file;
 use embassy_rp::pio::{Common, FifoJoin, Pio, PioPin, StateMachine};
 use embassy_rp::pio_programs::clock_divider::calculate_pio_clock_divider;
 use embassy_rp::spi::{self, Phase, Polarity, Spi};
@@ -51,47 +51,14 @@ const HCS300_PIO_SENTINEL: u32 = u32::MAX;
 /// pulse duration is `HCS300_TIMEOUT_TICKS - word`. If the line stays at one level for the whole
 /// timeout, `HCS300_PIO_SENTINEL` is pushed instead (and a stuck high line is waited out).
 ///
-/// One tick is 5 PIO cycles (5 MHz clock). Every cycle between an edge and the next sample is
-/// counted: the loops take exactly one tick per iteration, and each edge handler has a
-/// `jmp x--` to the next instruction whose only job is to count the handler's time as one tick.
-/// The `wait` delay gives the first pulse after a timeout the same latency as the following ones.
+/// The program and its cycle budget are in `pio/hcs300_pulse.pio`. One tick is 5 PIO cycles (5 MHz
+/// clock). The simulation tests in `test/sim/pio` read the same file.
 fn setup_pio_task_sm0<'d>(
     pio: &mut Common<'d, PIO0>,
     sm: &mut StateMachine<'d, PIO0, 0>,
     hcs300_pwm_pin: Peri<'d, impl PioPin>,
 ) {
-    #[rustfmt::skip]
-    let prog = pio_asm!(
-        "pull",
-        ".wrap_target",
-        "idle:",
-            "wait 1 pin 0 [3]",
-        "high:",
-            "mov x, osr",
-            "jmp x-- hi_loop",
-        "hi_loop:",
-            "jmp x-- hi_chk [3]",
-            "jmp timeout",
-        "hi_chk:",
-            "jmp pin hi_loop",
-            "in x, 32",
-            "push noblock",
-            "mov x, osr",
-            "jmp x-- lo_loop",
-        "lo_loop:",
-            "jmp pin rising",
-            "jmp x-- lo_loop [3]",
-        "timeout:",
-            "in x, 32",
-            "push noblock",
-            "wait 0 pin 0",
-            "jmp idle",
-        "rising:",
-            "in x, 32",
-            "push noblock",
-            "jmp high",
-        ".wrap",
-    );
+    let prog = pio_file!("pio/hcs300_pulse.pio");
     let mut cfg = pio::Config::default();
     let loaded_prog = &pio.load_program(&prog.program);
     debug!("HCS300 PIO0 origin: {}", loaded_prog.origin);
