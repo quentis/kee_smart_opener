@@ -6,9 +6,11 @@ gpios
 heapless
 Keeloq
 longpress
+noblock
 pico
 pinctrl
 pinmux
+preverify
 pwmleds
 pwms
 rustup
