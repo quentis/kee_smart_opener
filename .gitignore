@@ -16,6 +16,10 @@ sw/efr32fg23/config/rail/slc_args.json
 sw/efr32fg23/simplicity_sdk_2025.6.2
 sw/efr32fg23/trashed_modified_files
 
+# Reference documents are linked from README.md, not stored (the E07 manual is hard to find online)
+doc/*.pdf
+!doc/E07-433M20S_Usermanual_EN_v1.30.pdf
+
 # Prerequisites
 *.d
 
