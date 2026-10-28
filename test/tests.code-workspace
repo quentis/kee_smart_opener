@@ -1,0 +1,50 @@
+{
+    "folders": [
+        {
+            "name": "test",
+            "path": "."
+        }
+    ],
+    "settings": {
+        // Run the simulation tests with pytest
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "python.testing.pytestArgs": [
+            "sim/pio/tests"
+        ],
+        // Created by `uv sync` (or the first `uv run pytest`) in sim/pio
+        "python.defaultInterpreterPath": "${workspaceFolder}/sim/pio/.venv/Scripts/python.exe",
+        // Python project of the Python Environments extension, it owns the uv venv above, so it is not the workspace root.
+        // Kept here instead of in .vscode/settings.json
+        "python-envs.pythonProjects": [
+            {
+                "path": "sim/pio",
+                "envManager": "ms-python.python:venv",
+                "packageManager": "ms-python.python:pip"
+            }
+        ],
+        // pyproject.toml puts src/ on the pytest path, make Pylance resolve pio_sim the same way
+        "python.analysis.extraPaths": [
+            "sim/pio/src"
+        ],
+        // Keep generated files and the virtual environment out of the explorer and search
+        "files.exclude": {
+            "**/__pycache__": true,
+            "**/.pytest_cache": true,
+            "**/.venv": true
+        },
+        "search.exclude": {
+            "**/.venv": true,
+            "**/__pycache__": true
+        },
+        // Words used in the simulation tests and their docs
+        "cSpell.words": [
+            "pico",
+            "pioemu",
+            "pycache",
+            "pyproject",
+            "pytest",
+            "venv"
+        ]
+    }
+}
