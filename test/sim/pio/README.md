@@ -1,7 +1,8 @@
 # PIO simulation tests
 
 Simulation tests of the HCS300 capture PIO program of `sw/kso-fw-rs`, which measures the pulses. They run on
-[pioemu](https://pypi.org/project/rp2040-pio-emulator/), a Python PIO emulator, so no hardware is needed.
+[pioemu](https://github.com/quentis/rp2040-pio-emulator/tree/dev), a Python PIO emulator, so no hardware is needed.
+The `dev` branch of that fork is used (the upstream release plus IRQ support), see `tool.uv.sources` in `pyproject.toml`.
 
 ## Run
 

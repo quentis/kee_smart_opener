@@ -16,6 +16,9 @@ dev = [
 # Test project only: install the dependencies, do not build or install the project itself
 package = false
 
+[tool.uv.sources]
+rp2040-pio-emulator = { git = "https://github.com/quentis/rp2040-pio-emulator", rev = "dev" }
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

@@ -34,7 +34,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "rp2040-pio-emulator", specifier = ">=0.88.0" }]
+requires-dist = [{ name = "rp2040-pio-emulator", git = "https://github.com/quentis/rp2040-pio-emulator?rev=dev" }]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=9.0.2" }]
@@ -84,12 +84,8 @@ wheels = [
 
 [[package]]
 name = "rp2040-pio-emulator"
-version = "0.88.0"
-source = { registry = "https://pypi.org/simple" }
+version = "0.89.0"
+source = { git = "https://github.com/quentis/rp2040-pio-emulator?rev=dev#4dd5f12889ece5d0a1be8aea112b23cd42d105bd" }
 dependencies = [
     { name = "pytest" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/5f/45/d8ce545f8b10ef91e7128b68ff3c23afdd6f7789194e49c5b1f85a2df009/rp2040_pio_emulator-0.88.0.tar.gz", hash = "sha256:cd8d779e08b55c8949597b5993baf256797e7d0e52661a4cb6f6850f83803087", size = 16287, upload-time = "2026-08-28T20:44:48.889Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/89/e4/4995348d549f21ce7ad5d0eb372abf27c2f8b82a708e89126c7fe2138688/rp2040_pio_emulator-0.88.0-py3-none-any.whl", hash = "sha256:47c73c1727fa86e4a47cf130af7e6a246b8185db7a761095871de0e0eb5b5cc0", size = 23679, upload-time = "2026-08-28T20:44:49.949Z" },
 ]
