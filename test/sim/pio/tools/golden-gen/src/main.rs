@@ -1,14 +1,63 @@
 //! Assembles a list of PIO sources with the Rust `pio` assembler (the one behind embassy-rp's
 //! `pio_asm!`) and prints the machine code as JSON. The output is `tests/golden_opcodes.json`,
-//! which checks the Python assembler used by the simulation tests.
+//! which checks the Python assembler used by the simulation tests: opcodes, wrap, origin, side-set
+//! settings and public defines.
 //!
 //! Regenerate with (from test/sim/pio):
 //!     cargo run --manifest-path tools/golden-gen/Cargo.toml > tests/golden_opcodes.json
 
 use pio_parser::Parser;
+use std::collections::BTreeMap;
 
 /// Every instruction form the Python assembler supports, one program each
 const SINGLES: &[&str] = &[
+    "jmp 31",
+    "jmp x!=y, 5",
+    "jmp pin, 5",
+    "jmp !osre 5 [31]",
+    "JMP X-- 3",
+    "wait 1 pin, 3",
+    "wait 1 irq 2 rel",
+    "wait 0 irq 0 rel [2]",
+    "irq 3",
+    "irq set 3",
+    "irq nowait 3",
+    "irq wait 3",
+    "irq clear 3",
+    "irq 2 rel",
+    "irq wait 1 rel",
+    "irq clear 7 rel",
+    "irq set 1 prev",
+    "irq wait 2 next",
+    "irq clear 0 next [4]",
+    "IRQ WAIT 5",
+    "in pins, 32",
+    "in x,8",
+    "mov pindirs, x",
+    "mov pins, status",
+    "mov isr, ::osr",
+    "mov pindirs, ~null",
+    "mov x !y",
+    "mov x ~y",
+    "mov x, ::y",
+    "MOV X, Y",
+    "mov rxfifo[y], isr",
+    "mov rxfifo[0], isr",
+    "mov rxfifo[1], isr",
+    "mov rxfifo[2], isr",
+    "mov rxfifo[3], isr",
+    "mov osr, rxfifo[y]",
+    "mov osr, rxfifo[0]",
+    "mov osr, rxfifo[1]",
+    "mov osr, rxfifo[2]",
+    "mov osr, rxfifo[3]",
+    "mov x, y [31]",
+    "set x,5",
+    "Set X, 1",
+    "set pins, 1 [31]",
+    "push iffull noblock [31]",
+    "pull ifempty block [1]",
+    "pull noblock",
     "jmp 5",
     "jmp !x 5",
     "jmp x-- 5",
@@ -220,6 +269,129 @@ rising:
 ",
     ),
     (
+        "side-set 2 bits, required: side before and after the delay",
+        ".side_set 2
+    set pins, 1 side 3
+    nop side 0 [7]
+    jmp 0 [3] side 1
+    wait 1 pin 0 side 2 [2]
+    irq wait 4 rel side 0
+    push side 1
+    pull noblock side 2
+",
+    ),
+    (
+        "side-set 1 bit, optional",
+        ".side_set 1 opt
+    set pins, 1 side 1
+    nop
+    nop [7]
+    jmp 0 side 0 [3]
+    mov x, y side 1
+",
+    ),
+    (
+        "side-set 3 bits, optional, pindirs",
+        ".side_set 3 opt pindirs
+    nop side 5 [1]
+    nop side 7
+    nop [1]
+    nop
+",
+    ),
+    (
+        "side-set 5 bits",
+        ".side_set 5
+    nop side 31
+    jmp 1 side 0
+",
+    ),
+    (
+        "defines, expressions, origin, public labels",
+        ".define DELAY 3
+.define BITS 8
+.define public TE BITS * 2 + 3
+.define public SPAN (TE - 1) / 2
+.define public MIXED 7 - 2 - 1
+.define public NEGATIVE -4 + 9
+.define public REVERSED ::0x1
+.define public HEX 0x1F
+.define public BIN 0b101
+.origin 8
+public entry:
+    set x, 1 [DELAY]
+loop:
+    out pins, BITS
+    set y, (BITS - 1) [DELAY - 1]
+    jmp x-- loop
+    jmp end - 1
+    jmp TE - 13
+    in x, (HEX + 1)
+public end:
+    irq wait (HEX - 28)
+",
+    ),
+    (
+        "case insensitive keywords, case sensitive labels",
+        ".WRAP_TARGET
+Start:
+    SET X, 3
+Loop:
+    JMP X-- Loop [1]
+    jmp start_
+start_:
+    Nop
+.WRAP
+",
+    ),
+    (
+        "lang_opt and c-sdk block, program in a file",
+        ".define public FILE_LEVEL 2
+.program blink
+.lang_opt python sideset_init = pico.PIO.OUT_LOW
+.side_set 1
+.wrap_target
+    set pins, 1 side 0 [FILE_LEVEL]
+    set pins, 0 side 1 [FILE_LEVEL]
+.wrap
+% c-sdk {
+static inline void blink_program_init(PIO pio) {
+    pio_gpio_init(pio, 0);
+}
+%}
+",
+    ),
+    (
+        "hcs300 tx (without the directives pio-parser does not know)",
+        ".side_set 1 opt
+    set x, 1
+    in x, 6
+    in x, 1
+.wrap_target
+wait_start:
+    mov x, ~status
+    jmp !x wait_start
+    set x, 11 side 0
+preamble:
+    nop side 0 [1]
+    jmp x-- preamble side 1 [1]
+    set x, 17 side 0
+sync:
+    jmp x-- sync
+    mov x, ::isr
+pwm:
+    out y, 1 side 1 [1]
+    mov pins, ~y [1]
+    jmp x-- pwm side 0 [1]
+pwm_end:
+    out y, 30
+    set x, 8 [4]
+guard:
+    jmp x-- guard [7]
+.wrap
+",
+    ),
+    (
         "comments and default wrap",
         "start:
     set x, 3 ; comment
@@ -246,17 +418,38 @@ fn json_string(s: &str) -> String {
 
 fn entry(name: &str, source: &str) -> String {
     // the parser wants every line terminated, pio_asm! joins its strings with newlines as well
-    let parsed = Parser::<32>::parse_program(&format!("{source}\n"))
-        .unwrap_or_else(|e| panic!("cannot assemble {source:?}: {e:?}"));
+    let text = format!("{source}
+");
+    let parsed = if source.contains(".program") {
+        // what pio_file! uses
+        let file = Parser::<32>::parse_file(&text)
+            .unwrap_or_else(|e| panic!("cannot assemble {source:?}: {e:?}"));
+        assert_eq!(file.len(), 1, "one .program per source");
+        file.into_values().next().unwrap()
+    } else {
+        Parser::<32>::parse_program(&text)
+            .unwrap_or_else(|e| panic!("cannot assemble {source:?}: {e:?}"))
+    };
     let program = parsed.program;
     let code: Vec<String> = program.code.iter().map(|w| w.to_string()).collect();
+    let defines: BTreeMap<_, _> = parsed.public_defines.iter().collect();
+    let defines: Vec<String> = defines
+        .iter()
+        .map(|(name, value)| format!("{}: {}", json_string(name), value))
+        .collect();
+    let side_set = program.side_set;
     format!(
-        "  {{\"name\": {}, \"source\": {}, \"code\": [{}], \"wrap_target\": {}, \"wrap_top\": {}}}",
+        "  {{\"name\": {}, \"source\": {}, \"code\": [{}], \"wrap_target\": {}, \"wrap_top\": {}, \"origin\": {}, \"side_set_count\": {}, \"side_set_opt\": {}, \"side_set_pindirs\": {}, \"public_defines\": {{{}}}}}",
         json_string(name),
         json_string(source),
         code.join(", "),
         program.wrap.target,
         program.wrap.source,
+        program.origin.map_or("null".to_string(), |o| o.to_string()),
+        side_set.bits() - side_set.optional() as u8,
+        side_set.optional(),
+        side_set.pindirs(),
+        defines.join(", "),
     )
 }
 

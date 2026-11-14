@@ -1,6 +1,6 @@
 """Runs the firmware's PIO program on pioemu against a pin waveform.
 
-The state machine sees the waveform on GPIO 0 (used for both `wait pin 0` and `jmp pin`), gets
+The state machine sees the waveform on GPIO 0 (`in_base` and the JMP pin, so `wait pin 0` and `jmp pin` both read it), gets
 `timeout_ticks` in its TX FIFO, and its RX FIFO is emptied after every push, like a fast CPU would.
 """
 
@@ -60,6 +60,7 @@ def run_program(program: Program, segments: Sequence[Segment], tx_words: Sequenc
             initial_state=state,
             input_source=pins,
             jmp_pin=0,
+            in_base=0,  # WAIT PIN is relative to in_base
             wrap_target=program.wrap_target,
             wrap_top=program.wrap_top,
         )

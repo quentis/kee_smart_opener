@@ -2,7 +2,8 @@
 
 Simulation tests of the HCS300 capture PIO program of `sw/kso-fw-rs`, which measures the pulses. They run on
 [pioemu](https://github.com/quentis/rp2040-pio-emulator/tree/dev), a Python PIO emulator, so no hardware is needed.
-The `dev` branch of that fork is used (the upstream release plus IRQ support), see `tool.uv.sources` in `pyproject.toml`.
+The `dev` branch of that fork is used (the upstream release plus IRQ support and fixes of the instruction
+semantics found by cross-checking against a Pico 2, see its `CHANGELOG.md`), see `tool.uv.sources` in `pyproject.toml`.
 
 ## Run
 
@@ -42,12 +43,20 @@ behind `pio_asm!`. Regenerate them after adding instruction forms to `tools/gold
 cargo run --manifest-path tools/golden-gen/Cargo.toml > tests/golden_opcodes.json
 ```
 
-If the firmware starts using an instruction the Python assembler does not know (irq, side-set), the tests fail
-with an `AssemblerError` naming the line. pioemu has no IRQ model either.
+The assembler handles every instruction and directive that `pio-parser` (behind `pio_asm!` and `pio_file!`) knows:
+all instruction forms including irq and the RP2350 ones, delay and side-set, `.define` expressions, `.origin`,
+`.side_set`, `.wrap_target` / `.wrap`, `public` labels, `.lang_opt`, `.program` and `% c-sdk { %}` blocks. The golden
+file also holds wrap, origin, side-set settings and public defines of whole programs. What `pio-parser` rejects
+is rejected here too with an `AssemblerError` naming the line, except for the settings directives of the C++
+pioasm (`.clock_div`, `.fifo`, `.in`, `.out`, `.set`, `.mov_status`, `.pio_version`), which are read into
+`Program` and turned into `pioemu.emulate()` arguments by `Program.emulator_options()`. `pio-parser` rejects those
+directives, so `pio_file!` cannot build a program that has them. They follow the grammar in the pico-sdk's
+`tools/pioasm/parser.yy` and are covered by unit tests only, there is no pioasm output to compare with.
 
 ## Limits
 
-pioemu is a third-party emulator of the RP2040 PIO and is not validated against silicon. The instructions the
+pioemu is a third-party emulator of the RP2040 PIO. The fixes in the fork were checked on a Pico 2, but the
+emulator as a whole is not validated against silicon. The instructions the
 firmware uses are the same on the RP2350. The GPIO input synchronizer is not modelled (a fixed latency on both
 edges, it does not change measured durations), and the CPU is assumed to empty the RX FIFO instantly.
 The decoder that turns the measured pulses into packets is Rust (`src/hcs300.rs`) and not covered here.
