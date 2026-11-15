@@ -1,7 +1,10 @@
+Autopull
 clippy
+clkdiv
 codegen
 defmt
 DPRAM
+EXECCTRL
 gpios
 heapless
 Keeloq
@@ -14,7 +17,11 @@ preverify
 pwmleds
 pwms
 rustup
+SHIFTDIR
+sideset
 test
+txfifo
+TXLEVEL
 usbd
 USEC
 vlow

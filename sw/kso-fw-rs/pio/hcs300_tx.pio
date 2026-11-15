@@ -1,0 +1,91 @@
+; =============================================================================
+; Program: hcs300_tx (Microchip HCS300 / KeeLoq PWM RF Transmitter)
+; =============================================================================
+; Description:
+;   Generates a complete HCS300 rolling-code RF frame using Pulse Width
+;   Modulation (PWM). For every 66-bit packet pushed into the TX FIFO, the
+;   state machine outputs:
+;     1. Preamble : 12x High pulses (1 TE each) separated by 11x Low spaces (1 TE)
+;     2. Sync     : 10 TE continuous Low header gap
+;     3. Payload  : 66 bits PWM, LSB-first (3 TE per bit):
+;                   - Logic 0 = 2 TE High, 1 TE Low
+;                   - Logic 1 = 1 TE High, 2 TE Low
+;     4. Guard    : ~41.5 TE Low inter-frame guard time (39 TE in guard + wrap)
+;
+; Caller / Host Configuration Requirements:
+;   1. Clock Divider : Set SM clock so 2 PIO cycles = 1 Time Element (TE).
+;                      For standard TE = 400 us -> f_pio = 5 kHz (200 us/cycle).
+;                      At 150 MHz clk_sys, clkdiv = 30000.0.
+;   2. Pin Mapping   : Map BOTH `sideset_pins` (1 bit, optional) AND `out_pins`
+;                      (base = RF GPIO, count = 1) to the same RF TX GPIO pin,
+;                      and configure the pin direction as Output.
+;   3. Shift Config  : - IN_SHIFTDIR  = Right (default, used at boot to build 65)
+;                      - OUT_SHIFTDIR = Right (shifts out LSB bit 0 first)
+;                      - Autopull     = Enabled, threshold = 32 bits
+;   4. FIFO & Status : - Join FIFOs to TX (optional, 8 words holds 2 full frames)
+;                      - Set EXECCTRL_STATUS_SEL = TXLEVEL and STATUS_N = 2
+;                        (`txfifo < 2`). Autopull moves the first word of a
+;                        packet to the OSR as soon as it arrives, so `status`
+;                        waits for the other 2 words: it is all-1s until they
+;                        are present in the TX FIFO.
+;   5. TX FIFO Data Format (3x 32-bit words per frame, shifted out LSB-first):
+;      Because OUT_SHIFTDIR is Right, each 32-bit word is transmitted from
+;      bit [0] (LSB) up to bit [31] (MSB):
+;
+;      - Word 0 (Packet bits 0..31):
+;          bits [31:0]  = 32-bit KeeLoq Encrypted Hopping Code (bit 0 sent first)
+;
+;      - Word 1 (Packet bits 32..63):
+;          bits [27:0]  = 28-bit Serial Number (LSB at bit 0)
+;          bits [31:28] = 4-bit Button Status (bit 28=S3, 29=S0, 30=S1, 31=S2),
+;                         the field of the datasheet (DS21137G fig. 4-2), sent S3 first
+;
+;      - Word 2 (Packet bits 64..65 in the 2 LSBs; upper 30 bits are discarded):
+;          bit  [0]     = VLOW (Battery Low flag, packet bit 64)
+;          bit  [1]     = RPT  (Repeat flag, packet bit 65)
+;          bits [31:2]  = Unused / Don't care (flushed by `out y, 30` at pwm_end)
+; =============================================================================
+
+.program hcs300_tx
+.side_set 1 opt
+.clock_div 30000        ; TE = 400 us (2.5 kHz), 2 clk/TE -> f_pio = 5 kHz
+.fifo tx                ; Join RX/TX FIFOs into a single 8-word TX FIFO
+.out 1 right auto 32    ; 1 OUT pin (mov pins), shift OSR right (LSB first), autopull every 32 bits
+.mov_status txfifo < 2  ; STATUS = 0xFFFFFFFF if TX FIFO < 2 words (rest of the packet), else 0
+
+    ; --- One-Time Startup: Precompute 65 (0b1000001) in ISR ---
+    set x, 1            ; X = 1 (0b000001)
+    in x, 6             ; Shift 6 bits right into ISR -> ISR[31:26] = 000001
+    in x, 1             ; Shift 1 bit right into ISR  -> ISR[31:25] = 1000001 (bit-reverses to 65)
+
+.wrap_target
+wait_start:
+    ; --- Wait for Full 3-Word (66-Bit) Packet: word 0 is in the OSR (autopull), 2 words in the TX FIFO ---
+    mov x, ~status              ; X = 0 if TX FIFO has < 2 words, 0xFFFFFFFF if >= 2 words
+    jmp !x wait_start           ; Spin until words 1 and 2 are queued in FIFO
+
+    ; --- 1. Preamble: 12x (1 TE High) separated by 11x (1 TE Low) ---
+    set x, 11 side 0            ; Load loop counter for 12 pulses (11 down to 0), keep pin Low
+preamble:
+    nop side 0 [1]              ; Drive Low for 2 cycles (1 TE): pre-gap on 1st pass, then 11 spaces
+    jmp x-- preamble side 1 [1] ; Drive High for 2 cycles (1 TE) for each of the 12 pulses
+
+    ; --- 2. Sync / Header: 10 TE Continuous Low (20 cycles) ---
+    set x, 17 side 0            ; Cycle 1 of Sync Low; set loop counter for 18 iterations (17..0)
+sync:
+    jmp x-- sync                ; Cycles 2..19 of Sync Low (18 cycles)
+    mov x, ::isr                ; Cycle 20 of Sync Low; bit-reverse ISR into X -> X = 65 (66 bits)
+
+    ; --- 3. PWM Payload: 66 Bits, LSB-First (6 cycles = 3 TE per bit) ---
+pwm:
+    out y, 1 side 1 [1]         ; 1st TE (2 cycles): Drive High, shift next bit into Y (autopulls)
+    mov pins, ~y [1]            ; 2nd TE (2 cycles): Drive ~Y via OUT pin (Bit 0 -> High, Bit 1 -> Low)
+    jmp x-- pwm side 0 [1]      ; 3rd TE (2 cycles): Drive Low, decrement bit counter X (65..0)
+
+    ; --- 4. Flush Unused Bits & Guard Time (~39 TE Low) ---
+pwm_end:
+    out y, 30                   ; Cycle 1: Discard remaining 30 padding bits from Word 3 (empties OSR)
+    set x, 8 [4]                ; Cycles 2..6 (5 cycles): Set guard loop counter to 8 (9 iterations)
+guard:
+    jmp x-- guard [7]           ; Cycles 7..78 (9 * 8 = 72 cycles): Total 78 cycles (39 TE) Low
+.wrap

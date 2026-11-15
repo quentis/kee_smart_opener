@@ -1,7 +1,7 @@
 # PIO simulation tests
 
-Simulation tests of the PIO programs of `sw/kso-fw-rs` (so far the HCS300 capture program, which measures the
-pulses). They run on
+Simulation tests of the PIO programs of `sw/kso-fw-rs` (the HCS300 capture program, which measures the
+pulses, and the HCS300 transmitter). They run on
 [pioemu](https://github.com/quentis/rp2040-pio-emulator/tree/dev), a Python PIO emulator, so no hardware is needed.
 The `dev` branch of that fork is used (the upstream release plus IRQ support and fixes of the instruction
 semantics found by cross-checking against a Pico 2, see its `CHANGELOG.md`), see `tool.uv.sources` in `pyproject.toml`.
@@ -101,6 +101,28 @@ RX FIFO. The timeout it pulls from the TX FIFO is chosen by the tests (`tests/co
 - Back-to-back code words: idle marker between them if the guard time is longer than the timeout, none if not.
 - An idle line produces exactly one sentinel, one timeout after the last edge, for two different timeouts.
 - A stuck high line produces a sentinel and measurement resumes afterwards.
+
+`tests/test_hcs300_tx.py` drives `hcs300_tx.pio`, the transmitter, with TX FIFO words and checks the waveform on
+its pin (`src/pio_sim/hcs300_tx.py`). The expected waveform is made by `test/system/hcs300_wf_gen.py`, the
+generator of the hardware test, and the time unit is the PIO cycle (one TE is two cycles):
+
+- For several code words (all zeros, all ones, alternating, ...) and for each of the 16 button combinations the
+  whole frame is identical to the generator's, pulse by pulse: preamble, header, 66 PWM bits, guard time.
+  A code word (`Hcs300Codeword`) takes its buttons as `Button` flags (`Button.S1 | Button.S3`). They have the
+  layout of the button status field of the datasheet (DS21137G figure 4-2) and of `Hcs300ButtonStatus` in
+  `hcs300.rs`: S3 is bit 0, then S0, S1, S2. The field is sent LSb first, so on the air the order is S3, S0, S1,
+  S2, and it is bits 31:28 of the second TX FIFO word. The generator numbers the buttons S0..S3 from bit 0,
+  `Button.generator_value` converts.
+- Back-to-back code words come out in order, 41.5 TE apart (the guard time of the generator plus the 2.5 TE
+  the program needs to start the next frame), and nothing is sent without words.
+- Fewer than a complete packet starts no frame, only the frame pin is driven, the pin can be chosen, and TE
+  follows the clock divider (400 us at the `.clock_div 30000` of the file).
+
+The program starts a frame when `txfifo < 2` is false: autopull moves the first word of a packet to the OSR as
+soon as it arrives, so the status waits for the other two words. (With `txfifo < 3`, which the file had before,
+three words never started a frame, a fourth word was needed.) The tests check that a packet of three words is
+enough, that an incomplete next packet starts no frame, and that the settings of the file are the ones the
+program needs: one OUT pin (`mov pins` drives the frame pin only), autopull at 32 bits, side-set with `opt`.
 
 `tests/test_assembler.py` checks the small Python assembler (`src/pio_sim/assembler.py`) that turns the
 `.pio` text into opcodes. pioemu has no assembler, and the existing Python ones need heavy dependencies
