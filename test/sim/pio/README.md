@@ -78,7 +78,7 @@ other. A module can shadow the fixtures to configure a program once for all its 
 `pio_sim.harness.run()` runs any loaded program: input waveforms on GPIOs as (level, cycles) segments, TX words
 up front, every RX push recorded (and taken out of the FIFO at once, like a fast CPU), every change of the
 output pins recorded, `Trace.output_segments(pin)` turns them into a waveform. What a program needs as stimulus
-and how its output is decoded belongs to the tests of that program, `src/pio_sim/capture.py` is the example.
+and how its output is decoded belongs to the tests of that program, `src/pio_sim/hcs300_capture.py` is the example.
 
 ## What is tested
 

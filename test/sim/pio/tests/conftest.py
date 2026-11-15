@@ -1,11 +1,11 @@
 import pytest
 
-from pio_sim.capture import Capture
+from pio_sim.hcs300_capture import Hcs300Capture
 from pio_sim.programs import SmProgram, load_program
 
 # The capture program pulls this word from the TX FIFO at the start: ticks (1 tick = 1 us) of silence until a
 # level counts as idle. The firmware's HCS300_TIMEOUT_TICKS has the same value, but the tests do not depend on it.
-CAPTURE_TIMEOUT_TICKS = 10_000
+HCS300_CAPTURE_TIMEOUT_TICKS = 10_000
 
 
 @pytest.fixture(scope="session")
@@ -25,6 +25,6 @@ def pio_program():
 
 
 @pytest.fixture(scope="session")
-def capture(pio_program) -> Capture:
+def hcs300_capture(pio_program) -> Hcs300Capture:
     """The HCS300 capture program, with the settings from its .pio file"""
-    return Capture(pio_program("hcs300_capture.pio"), CAPTURE_TIMEOUT_TICKS)
+    return Hcs300Capture(pio_program("hcs300_capture.pio"), HCS300_CAPTURE_TIMEOUT_TICKS)

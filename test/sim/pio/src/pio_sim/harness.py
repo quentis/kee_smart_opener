@@ -5,7 +5,7 @@ given up front. Every word it pushes to the RX FIFO is recorded and, by default,
 like a fast CPU would. Every change of the output pins is recorded as well.
 
 The state machine settings (wrap, pin mapping, shift configuration, ...) come from the program, see config.py.
-Program specific stimulus and decoding belong to the tests, see capture.py for an example.
+Program specific stimulus and decoding belong to the tests, see hcs300_capture.py for an example.
 """
 
 import bisect

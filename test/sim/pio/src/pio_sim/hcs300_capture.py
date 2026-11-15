@@ -27,7 +27,7 @@ class Event:
 
 
 @dataclass(frozen=True)
-class Capture:
+class Hcs300Capture:
     sm: SmProgram
     timeout_ticks: int
 
