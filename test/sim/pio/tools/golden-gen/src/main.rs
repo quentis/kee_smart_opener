@@ -5,6 +5,9 @@
 //!
 //! Regenerate with (from test/sim/pio):
 //!     cargo run --manifest-path tools/golden-gen/Cargo.toml > tests/golden_opcodes.json
+//!
+//! Check that `pio_file!` accepts .pio files (the `.lang_opt sim` lines, for example):
+//!     cargo run --manifest-path tools/golden-gen/Cargo.toml -- --check ../../../sw/kso-fw-rs/pio/hcs300_capture.pio
 
 use pio_parser::Parser;
 use std::collections::BTreeMap;
@@ -392,6 +395,19 @@ guard:
 ",
     ),
     (
+        "lang_opt sim settings",
+        ".program settings
+.lang_opt sim clock_hz = 5000000
+.lang_opt sim in_base = 0
+.lang_opt sim auto_pull = true
+.lang_opt python sideset_init = pico.PIO.OUT_LOW
+    pull
+.wrap_target
+    out pins, 1
+.wrap
+",
+    ),
+    (
         "comments and default wrap",
         "start:
     set x, 3 ; comment
@@ -453,7 +469,41 @@ fn entry(name: &str, source: &str) -> String {
     )
 }
 
+/// Parses .pio files like `pio_file!` does and prints what came out, exits with an error if one is rejected
+fn check(paths: &[String]) {
+    let mut failed = false;
+    for path in paths {
+        let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("cannot read {path}: {e}"));
+        match Parser::<32>::parse_file(&text) {
+            Ok(programs) => {
+                for (name, parsed) in programs {
+                    let wrap = parsed.program.wrap;
+                    println!(
+                        "{path}: program {name}, {} instructions, wrap {}..{}",
+                        parsed.program.code.len(),
+                        wrap.target,
+                        wrap.source
+                    );
+                }
+            }
+            Err(e) => {
+                println!("{path}: rejected: {e:?}");
+                failed = true;
+            }
+        }
+    }
+    if failed {
+        std::process::exit(1);
+    }
+}
+
 fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("--check") {
+        check(&args[1..]);
+        return;
+    }
+
     let mut entries: Vec<String> = SINGLES.iter().map(|s| entry(s, s)).collect();
     entries.extend(PROGRAMS.iter().map(|(name, source)| entry(name, source)));
     println!("[\n{}\n]", entries.join(",\n"));

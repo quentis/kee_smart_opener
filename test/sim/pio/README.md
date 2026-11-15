@@ -1,6 +1,7 @@
 # PIO simulation tests
 
-Simulation tests of the HCS300 capture PIO program of `sw/kso-fw-rs`, which measures the pulses. They run on
+Simulation tests of the PIO programs of `sw/kso-fw-rs` (so far the HCS300 capture program, which measures the
+pulses). They run on
 [pioemu](https://github.com/quentis/rp2040-pio-emulator/tree/dev), a Python PIO emulator, so no hardware is needed.
 The `dev` branch of that fork is used (the upstream release plus IRQ support and fixes of the instruction
 semantics found by cross-checking against a Pico 2, see its `CHANGELOG.md`), see `tool.uv.sources` in `pyproject.toml`.
@@ -16,14 +17,81 @@ uv run pytest
 uv creates `.venv`, installs the dependencies from `uv.lock` (pioemu, pytest) and runs the tests. A full
 run takes about 40 s, the emulator is slow.
 
+## How a program is simulated
+
+Any `.pio` file works, the tests never read the firmware's Rust code. `pio_sim.programs.load_program("name.pio")`
+loads a file from `sw/kso-fw-rs/pio` (set `KSO_PIO_DIR` for another directory, or pass a path), assembles it
+and builds the state machine settings. The settings come from the file, in layers, later ones win
+(`src/pio_sim/config.py`):
+
+1. pioemu defaults;
+2. the program text: `.wrap_target` / `.wrap`, `.side_set`, and the settings directives of the C++ pioasm
+   (`.clock_div`, `.fifo`, `.in`, `.out`, `.set`, `.mov_status`, `.pio_version`);
+3. `.lang_opt sim <name> = <value>` lines, for what has no directive: the clock (`clock_hz`, or `clock_div` as a
+   divider) and the pin mapping `in_base`, `jmp_pin`, `out_base`, `out_count`, `set_base`, `set_count`,
+   `side_set_base`. They can also override the shift settings (`auto_pull`, `pull_threshold`,
+   `shift_osr_right`, ...), the names are those of `pioemu.emulate()`;
+4. the test, see below.
+
+Dividers (`.clock_div`) refer to one system clock for the whole simulation, 150 MHz like the RP2350 of the
+firmware (`SYS_CLOCK_HZ` in `config.py`, `KSO_SYS_CLOCK_HZ` to change it). A file that gives its clock more than
+once (`.clock_div` and `clock_hz`, say) has to agree with itself, otherwise loading fails. The emulator has no
+clock divider, the clock only turns PIO cycles into time.
+
+Both `pio-parser` (`pio_file!`) and the C++ pioasm ignore `.lang_opt` lines, so a file that the firmware builds
+can carry them, `hcs300_capture.pio` does:
+
+```
+.lang_opt sim clock_hz = 5000000
+.lang_opt sim in_base = 0
+.lang_opt sim jmp_pin = 0
+```
+
+`pio-parser` rejects the settings directives, so a file with them cannot go through `pio_file!`
+(`hcs300_tx.pio` is one). To check what the firmware's assembler accepts:
+
+```sh
+cargo run --manifest-path tools/golden-gen/Cargo.toml -- --check ../../../sw/kso-fw-rs/pio/hcs300_capture.pio
+```
+
+The `.lang_opt sim clock_hz` of the capture program is a second copy of `calculate_pio_clock_divider(5_000_000)`
+in `main.rs`, and nothing checks that they agree: change both together.
+
+A file needs no clock and no pin mapping: for a program whose speed or pins are up to the user, like a PIO SPI,
+the file says nothing and each test chooses. The `pio_program` fixture (`tests/conftest.py`) loads a file and
+applies the settings of the test on top, with the same names as the `sim` options but as Python values:
+
+```python
+def test_spi_at_10_mhz(pio_program):
+    sm = pio_program("spi.pio", clock_hz=10_000_000, out_base=3, set_base=4, side_set_base=5)
+    ...
+
+@pytest.mark.parametrize("clock_div", [3, 15, 150])
+def test_spi_speeds(pio_program, clock_div):
+    sm = pio_program("spi.pio", clock_div=clock_div)  # divider of the 150 MHz system clock
+```
+
+`SmProgram.configured(**overrides)` does the same on an already loaded program. Overrides add to the settings
+of the file and a clock replaces the clock of the file. The result is immutable, so tests do not affect each
+other. A module can shadow the fixtures to configure a program once for all its tests.
+
+`pio_sim.harness.run()` runs any loaded program: input waveforms on GPIOs as (level, cycles) segments, TX words
+up front, every RX push recorded (and taken out of the FIFO at once, like a fast CPU), every change of the
+output pins recorded, `Trace.output_segments(pin)` turns them into a waveform. What a program needs as stimulus
+and how its output is decoded belongs to the tests of that program, `src/pio_sim/capture.py` is the example.
+
 ## What is tested
 
-The PIO program is the file that `setup_pio_task_sm0` in `sw/kso-fw-rs/src/main.rs` includes with `pio_file!`
-(`sw/kso-fw-rs/pio/hcs300_capture.pio`). The settings come from `main.rs`: `HCS300_TIMEOUT_TICKS`,
-`HCS300_PIO_SENTINEL` and `calculate_pio_clock_divider`. So the tests always simulate what the firmware
-contains. Set `KSO_FIRMWARE_DIR` to simulate another copy of the firmware crate.
+`tests/test_pio_files.py`: every `.pio` file in the firmware directory assembles and fits the 32 words, so a
+new file with a mistake is caught even before it has tests.
 
-`tests/test_hcs300_pio.py` drives the program with pin waveforms and checks what it pushes to the RX FIFO:
+`tests/test_config.py`, `tests/test_fixtures.py` and `tests/test_harness.py` check the layering of the settings,
+the overrides of the tests and the runner with small inline programs.
+
+`tests/test_hcs300_capture.py` drives `hcs300_capture.pio` with pin waveforms and checks what it pushes to the
+RX FIFO. The timeout it pulls from the TX FIFO is chosen by the tests (`tests/conftest.py`), the sentinel
+`0xFFFF_FFFF` is what the program pushes when its counter underflows. That the firmware's own timeout
+(`HCS300_TIMEOUT_TICKS`) exceeds the longest header is a compile-time assert in `main.rs`.
 
 - Pulse durations are exact within one tick (1 us) and unbiased on both edges, for random pulse widths at
   random phase against the PIO clock.
@@ -31,7 +99,7 @@ contains. Set `KSO_FIRMWARE_DIR` to simulate another copy of the firmware crate.
 - A complete code word, generated by `test/system/hcs300_wf_gen.py` (the generator of the hardware test),
   is measured pulse by pulse at TE = 65, 100, 400 and 660 us.
 - Back-to-back code words: idle marker between them if the guard time is longer than the timeout, none if not.
-- An idle line produces exactly one sentinel, one timeout after the last edge.
+- An idle line produces exactly one sentinel, one timeout after the last edge, for two different timeouts.
 - A stuck high line produces a sentinel and measurement resumes afterwards.
 
 `tests/test_assembler.py` checks the small Python assembler (`src/pio_sim/assembler.py`) that turns the

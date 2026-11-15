@@ -9,7 +9,7 @@ from __future__ import annotations
 import importlib.util
 from functools import cache
 
-from .firmware import REPO_ROOT
+from .programs import REPO_ROOT
 
 GENERATOR = REPO_ROOT / "test" / "system" / "hcs300_wf_gen.py"
 

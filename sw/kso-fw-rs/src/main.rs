@@ -41,6 +41,7 @@ bind_interrupts!(struct Irqs {
 /// Idle/stuck timeout of the HCS300 PIO program in ticks (1 tick = 1 us). Has to be longer than the
 /// longest legitimate pulse, which is the header (10 TE, up to 6.6 ms).
 const HCS300_TIMEOUT_TICKS: u32 = 10_000;
+const _: () = assert!(HCS300_TIMEOUT_TICKS > 10 * 660, "the timeout must exceed the longest HCS300 header");
 
 /// Word pushed by the HCS300 PIO program when the line was idle or stuck for the whole timeout
 const HCS300_PIO_SENTINEL: u32 = u32::MAX;
@@ -52,7 +53,8 @@ const HCS300_PIO_SENTINEL: u32 = u32::MAX;
 /// timeout, `HCS300_PIO_SENTINEL` is pushed instead (and a stuck high line is waited out).
 ///
 /// The program and its cycle budget are in `pio/hcs300_capture.pio`. One tick is 5 PIO cycles (5 MHz
-/// clock). The simulation tests in `test/sim/pio` read the same file.
+/// clock, also stated in the `.lang_opt sim clock_hz` line of that file for the simulation tests in
+/// `test/sim/pio`).
 fn setup_pio_task_sm0<'d>(
     pio: &mut Common<'d, PIO0>,
     sm: &mut StateMachine<'d, PIO0, 0>,

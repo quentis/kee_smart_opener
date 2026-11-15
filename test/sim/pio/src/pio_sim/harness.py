@@ -1,19 +1,22 @@
-"""Runs the firmware's PIO program on pioemu against a pin waveform.
+"""Runs any PIO program on pioemu against pin waveforms.
 
-The state machine sees the waveform on GPIO 0 (`in_base` and the JMP pin, so `wait pin 0` and `jmp pin` both read it), gets
-`timeout_ticks` in its TX FIFO, and its RX FIFO is emptied after every push, like a fast CPU would.
+Inputs are waveforms on GPIOs, as (level, duration in PIO cycles) segments. The program gets the TX words it is
+given up front. Every word it pushes to the RX FIFO is recorded and, by default, taken out of the FIFO right away,
+like a fast CPU would. Every change of the output pins is recorded as well.
+
+The state machine settings (wrap, pin mapping, shift configuration, ...) come from the program, see config.py.
+Program specific stimulus and decoding belong to the tests, see capture.py for an example.
 """
 
 import bisect
 from collections import deque
 from dataclasses import dataclass, replace
-from typing import Literal, Sequence
+from typing import Mapping, Sequence
 
 import pioemu
 from pioemu import State
 
-from .assembler import Program
-from .firmware import Firmware
+from .programs import SmProgram
 
 Segment = tuple[int, int]
 """(pin level, duration in PIO cycles)"""
@@ -27,74 +30,105 @@ class Push:
 
 
 @dataclass(frozen=True)
-class Event:
-    """One RX FIFO word, interpreted the way the Rust side does."""
-
-    kind: Literal["pulse", "idle"]
+class PinChange:
     cycle: int
-    ticks: int
-    """Pulse duration in ticks (1 tick = 1 us), 0 for idle"""
+    """PIO cycle on which the instruction that changed the pins ran. Delay cycles come after it."""
+    values: int
+    """Pin values after the change, one bit per GPIO"""
+    directions: int
+    """Pin directions after the change, 1 = output"""
 
 
-def run_program(program: Program, segments: Sequence[Segment], tx_words: Sequence[int]) -> list[Push]:
-    """Executes `program` for the whole waveform and returns every word it pushed."""
-    bounds: list[int] = []
-    levels: list[int] = []
-    total = 0
-    for level, cycles in segments:
-        total += cycles
-        bounds.append(total)
-        levels.append(level)
+@dataclass(frozen=True)
+class Trace:
+    pushes: list[Push]
+    pin_changes: list[PinChange]
+    cycles: int
+    """Length of the run in PIO cycles"""
+    final: State
+
+    def output_segments(self, pin: int, end: int | None = None) -> list[Segment]:
+        """Level of an output pin over time as (level, cycles) segments. The pin is low at cycle 0 and the
+        waveform runs up to `end`, by default the end of the run."""
+        end = self.cycles if end is None else end
+        segments: list[Segment] = []
+        level, since = 0, 0
+        for change in self.pin_changes:
+            new_level = (change.values >> pin) & 1
+            if new_level != level and change.cycle < end:
+                if change.cycle > since:
+                    segments.append((level, change.cycle - since))
+                level, since = new_level, change.cycle
+        if end > since:
+            segments.append((level, end - since))
+        return segments
+
+
+def run(
+    sm: SmProgram,
+    *,
+    tx_words: Sequence[int] = (),
+    inputs: Mapping[int, Sequence[Segment]] | None = None,
+    cycles: int | None = None,
+    drain_rx: bool = True,
+) -> Trace:
+    """Executes `sm.program` for `cycles` PIO cycles, by default as long as the longest input waveform.
+
+    A GPIO without a waveform reads low, a waveform ends with its last level held.
+    """
+    inputs = inputs or {}
+    waveforms = {pin: _Waveform(segments) for pin, segments in inputs.items()}
+    total = max([cycles or 0] + [waveform.total for waveform in waveforms.values()])
+    if total <= 0:
+        raise ValueError("nothing to run: give input waveforms or cycles")
 
     # pioemu looks at the real type of this annotation, so this module must not use
     # `from __future__ import annotations`
     def pins(clock: int) -> int:
-        return levels[min(bisect.bisect_right(bounds, clock), len(levels) - 1)]
+        return sum(waveform.level(clock) << pin for pin, waveform in waveforms.items())
 
     pushes: list[Push] = []
+    pin_changes: list[PinChange] = []
     state = State(transmit_fifo=deque(tx_words))
     while state.clock < total:
         generator = pioemu.emulate(
-            program.code,
-            stop_when=lambda opcode, s: s.clock >= total or len(s.receive_fifo) > 0,
+            sm.program.code,
+            stop_when=lambda opcode, s: s.clock >= total or (drain_rx and len(s.receive_fifo) > 0),
             initial_state=state,
             input_source=pins,
-            jmp_pin=0,
-            in_base=0,  # WAIT PIN is relative to in_base
-            wrap_target=program.wrap_target,
-            wrap_top=program.wrap_top,
+            **sm.config.options,
         )
         last = None
         for before, after in generator:
             if len(after.receive_fifo) > len(before.receive_fifo):
                 pushes.append(Push(before.clock, after.receive_fifo[-1]))
+            if (after.pin_values, after.pin_directions) != (before.pin_values, before.pin_directions):
+                pin_changes.append(PinChange(before.clock, after.pin_values, after.pin_directions))
             last = after
         if last is None:
             break
-        state = replace(last, receive_fifo=deque())
-    return pushes
+        state = replace(last, receive_fifo=deque()) if drain_rx else last
+        if not drain_rx:
+            break
+    return Trace(pushes=pushes, pin_changes=pin_changes, cycles=total, final=state)
 
 
-def interpret(firmware: Firmware, pushes: Sequence[Push]) -> list[Event]:
-    """Same decoding as the firmware task: sentinel = idle, otherwise duration = T - word."""
-    events = []
-    for push in pushes:
-        if push.word == firmware.sentinel:
-            events.append(Event("idle", push.cycle, 0))
-        else:
-            events.append(Event("pulse", push.cycle, firmware.timeout_ticks - push.word))
-    return events
+class _Waveform:
+    def __init__(self, segments: Sequence[Segment]):
+        self.bounds: list[int] = []
+        self.levels: list[int] = []
+        self.total = 0
+        for level, cycles in segments:
+            self.total += cycles
+            self.bounds.append(self.total)
+            self.levels.append(level)
 
-
-def simulate_cycles(firmware: Firmware, segments: Sequence[Segment]) -> list[Event]:
-    pushes = run_program(firmware.program, segments, [firmware.timeout_ticks])
-    return interpret(firmware, pushes)
-
-
-def simulate(firmware: Firmware, segments_us: Sequence[tuple[int, float]]) -> list[Event]:
-    """Like simulate_cycles(), with the waveform given as (level, duration in us)."""
-    return simulate_cycles(firmware, to_cycles(segments_us, firmware.cycles_per_us))
+    def level(self, clock: int) -> int:
+        if not self.levels:
+            return 0
+        return self.levels[min(bisect.bisect_right(self.bounds, clock), len(self.levels) - 1)]
 
 
 def to_cycles(segments_us: Sequence[tuple[int, float]], cycles_per_us: int) -> list[Segment]:
+    """Waveform given as (level, duration in us) -> (level, duration in PIO cycles)"""
     return [(level, max(1, round(duration * cycles_per_us))) for level, duration in segments_us]

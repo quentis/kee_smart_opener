@@ -16,6 +16,12 @@
 ; the same latency as the following ones.
 
 .program hcs300_capture
+; Settings of the simulation tests (test/sim/pio), ignored by the assembler. clock_hz has to match
+; calculate_pio_clock_divider() in main.rs. The input pin is the IN base and the JMP pin, the simulation
+; puts it on GPIO 0.
+.lang_opt sim clock_hz = 5000000
+.lang_opt sim in_base = 0
+.lang_opt sim jmp_pin = 0
     pull
 .wrap_target
 idle:

@@ -192,3 +192,23 @@ def test_mov_status_reaches_pioemu():
 def test_irq_mov_status_has_no_pioemu_equivalent():
     with pytest.raises(ValueError):
         assemble(".mov_status irq set 1\nnop").emulator_options()
+
+
+def test_lang_opts_are_collected_per_language():
+    program = assemble(
+        '.lang_opt sim clock_hz = 5000000\n.lang_opt sim in_base = 0\n.lang_opt python sideset_init = pico.PIO.OUT_LOW\n'
+        '.lang_opt c name = "quoted value"\n.lang_opt sim in_base = 1\nnop'
+    )
+
+    assert program.lang_opts == {
+        "sim": {"clock_hz": "5000000", "in_base": "1"},  # the last one wins
+        "python": {"sideset_init": "pico.PIO.OUT_LOW"},
+        "c": {"name": "quoted value"},
+    }
+    assert assemble("nop").lang_opts == {}
+
+
+@pytest.mark.parametrize("line", [".lang_opt", ".lang_opt sim", ".lang_opt sim x", ".lang_opt sim x =", ".lang_opt sim x=1"])
+def test_malformed_lang_opt_is_rejected(line):
+    with pytest.raises(AssemblerError):
+        assemble(line + "\nnop")

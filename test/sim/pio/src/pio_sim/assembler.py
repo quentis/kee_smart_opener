@@ -4,7 +4,7 @@ Understands the pioasm syntax that `pio_asm!` / `pio_file!` (embassy-rp, the Rus
 accept: every instruction (jmp, wait, in, out, push, pull, mov, irq, set, nop, including the RP2350
 forms `irq prev|next`, `mov pindirs` and `mov rxfifo[..]`) with delay and side-set, labels (also
 `public`), `.define` with expressions, `.origin`, `.side_set <n> [opt] [pindirs]`,
-`.wrap_target` / `.wrap`, `.program`, `.lang_opt` and `% c-sdk { ... %}` blocks.
+`.wrap_target` / `.wrap`, `.program`, `.lang_opt` (collected in `Program.lang_opts`) and `% c-sdk { ... %}` blocks.
 
 On top of that it reads the program settings directives of the C++ pioasm of the pico-sdk, which
 `pio-parser` rejects: `.clock_div`, `.fifo`, `.in`, `.out`, `.set`, `.mov_status` and `.pio_version`.
@@ -70,12 +70,15 @@ class Program:
     out_shift: ShiftConfig | None = None
     set_count: int | None = None
     mov_status: MovStatus | None = None
+    lang_opts: dict[str, dict[str, str]] = field(default_factory=dict)
+    """`.lang_opt <language> <name> = <value>` lines: {language: {name: value}}, quotes removed. Both assemblers
+    ignore them, which makes them a place for settings of other tools (see config.py for the `sim` language)."""
 
     def emulator_options(self) -> dict:
         """The keyword arguments of `pioemu.emulate()` that follow from the program: wrap, side-set, shift
-        configuration, set pin count and `mov ... status`. Pin bases, `jmp_pin` and `in_base` are up to the
-        caller. FIFO joining (`.fifo`), the clock divider and side-set to pin directions are not modelled by
-        pioemu and left out.
+        configuration, set pin count and `mov ... status`. Pin bases, `jmp_pin` and `in_base` are not part of
+        the program text, config.py adds them. FIFO joining (`.fifo`), the clock divider and side-set to pin
+        directions are not modelled by pioemu and left out.
         """
         options: dict = {"wrap_target": self.wrap_target, "wrap_top": self.wrap_top}
         if self.side_set_count:
@@ -138,7 +141,8 @@ _COMMENT = re.compile(r";.*|//.*")
 # pioasm: these have to come before the first instruction
 _BEFORE_INSTRUCTIONS = {".pio_version", ".fifo", ".in", ".out", ".set", ".mov_status"}
 _FIFO_CONFIGS = {"txrx", "tx", "rx", "txput", "txget", "putget"}
-_LANG_OPT = re.compile(r"\s*\.lang_opt\s", re.IGNORECASE)
+_LANG_OPT = re.compile(r"\s*\.lang_opt\b", re.IGNORECASE)
+_LANG_OPT_FORMAT = re.compile(r"\s*\.lang_opt\s+(\S+)\s+(\S+)\s+=\s+(\S.*?)\s*$", re.IGNORECASE)
 _C_SDK_BLOCK = re.compile(r"% c-sdk \{[^%]*%\}")
 
 _I32 = 1 << 32
@@ -184,13 +188,21 @@ def assemble(source: str) -> Program:
     out_shift: ShiftConfig | None = None
     set_count: int | None = None
     mov_status: MovStatus | None = None
+    lang_opts: dict[str, dict[str, str]] = {}
     instructions: list[tuple[int, list[_Token], str]] = []
 
     # first pass: labels, defines and directives, the instructions are encoded in the second pass
     for number, raw in enumerate(source.splitlines(), start=1):
         text = _COMMENT.sub("", raw)
         if _LANG_OPT.match(text):
-            continue  # free text for other languages
+            option = _LANG_OPT_FORMAT.match(text)
+            if not option:
+                raise AssemblerError(
+                    f"line {number}: expected format is .lang_opt language option_name = option_value: {raw.strip()!r}"
+                )
+            language, name, value = option.groups()
+            lang_opts.setdefault(language, {})[name] = value[1:-1] if len(value) > 1 and value[0] == value[-1] == '"' else value
+            continue
         tokens = _tokenize(text, number)
 
         while tokens:
@@ -213,8 +225,6 @@ def assemble(source: str) -> Program:
             if operands.more():
                 operands.take()
             operands.end()
-        elif directive == ".lang_opt":
-            pass
         elif directive == ".define":
             public = operands.accept("public")
             name = _symbol_name(operands.take("a name"), number)
@@ -341,6 +351,7 @@ def assemble(source: str) -> Program:
         out_shift=out_shift,
         set_count=set_count,
         mov_status=mov_status,
+        lang_opts=lang_opts,
     )
 
 
