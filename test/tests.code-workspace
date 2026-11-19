@@ -10,7 +10,8 @@
         "python.testing.pytestEnabled": true,
         "python.testing.unittestEnabled": false,
         "python.testing.pytestArgs": [
-            "sim/pio/tests"
+            "tests",
+            "-rP"
         ],
         // Created by `uv sync` (or the first `uv run pytest`) in sim/pio
         "python.defaultInterpreterPath": "${workspaceFolder}/sim/pio/.venv/Scripts/python.exe",
@@ -39,11 +40,25 @@
         },
         // Words used in the simulation tests and their docs
         "cSpell.words": [
+            "autopull",
+            "autopush",
+            "ifempty",
+            "iffull",
+            "noblock",
+            "osre",
             "pico",
+            "pindirs",
+            "pioasm",
             "pioemu",
+            "putget",
             "pycache",
             "pyproject",
             "pytest",
+            "rxfifo",
+            "txfifo",
+            "txget",
+            "txput",
+            "txrx",
             "venv"
         ]
     }
