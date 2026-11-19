@@ -1,0 +1,18 @@
+{
+	"mcpServers": {
+		"rust-analyzer": {
+			"type": "stdio",
+			"command": "rust-analyzer-mcp",
+			"args": []
+		},
+		"cratesio": {
+			"type": "http",
+			"url": "https://cratesio-mcp.fly.dev/"
+		},
+		"rust-docs": {
+			"type": "stdio",
+			"command": "rust-docs-mcp",
+			"args": []
+		}
+	}
+}
